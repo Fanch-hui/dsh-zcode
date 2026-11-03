@@ -1,0 +1,105 @@
+{
+  "name": "dsh-zcode",
+  "version": "0.1.0",
+  "description": "ZCode Coding Plan providers for DeepSeek Harness",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "bin": { "dsh-zcode": "./lib/cli/bin.js" },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./remote": {
+      "types": "./lib/control/remote.d.ts",
+      "default": "./lib/control/remote.js"
+    },
+    "./typert": {
+      "types": "./lib/control/remote.d.ts",
+      "default": "./lib/control/remote.js"
+    }
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "engines": {
+    "node": ">=24.9.0",
+    "dsh": "0.2.2-alpha.3"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "build": "tsc -p tsconfig.build.json && node scripts/build-client.mjs",
+    "prepack": "npm run build && node scripts/check-package.mjs"
+  },
+  "dependencies": {
+    "undici": "^8.10.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.6-alpha.2",
+    "@deepseek-ai/dsh-api-remotes": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-app-boot": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-attachment": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-renderer": "^0.2.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-settings": "^0.2.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-credentials": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-llm": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-typert-registry": "0.2.2-alpha.3",
+    "@deepseek-ai/schemastery": "3.18.6-alpha.2",
+    "@types/node": "^24.0.0",
+    "@types/react": "^18.3.31",
+    "esbuild": "^0.28.2",
+    "react": "18.3.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "@deepseek-ai/dsh-authorization": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-credentials-local": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-home-paths": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-atomic-write": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-launch-environment": "0.2.2-alpha.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.6-alpha.2",
+    "@deepseek-ai/dsh-api-remotes": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-app-boot": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-attachment": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-credentials": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-llm": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-typert-registry": "0.2.2-alpha.3",
+    "@deepseek-ai/schemastery": "3.18.6-alpha.2",
+    "react": "18.3.1",
+    "@deepseek-ai/dsh-authorization": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-credentials-local": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-home-paths": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-atomic-write": "0.2.2-alpha.3",
+    "@deepseek-ai/dsh-launch-environment": "0.2.2-alpha.3"
+  }
+}
