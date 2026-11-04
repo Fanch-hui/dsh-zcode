@@ -4,6 +4,7 @@ import { credentialKey, type CredentialProvider, type CredentialRecord } from '@
 import { ZcodeAuth, type StoredAccount } from '../src/auth/index.js'
 import { DshCredentialStore } from '../src/storage/credentials.js'
 import { ZCodeRuntime } from '../src/runtime.js'
+import { FixtureUpstream } from './helpers/upstream.js'
 
 function provider() {
   const records = new Map<string, CredentialRecord>()
@@ -52,11 +53,11 @@ test('cancelled writes cannot change the active account and damaged pointers can
   await assert.rejects(store.save('bigmodel', manual('cancelled'), () => { throw new Error('cancelled') }, grant))
   assert.deepEqual(await store.load('bigmodel'), grant)
   records.set(credentialKey('llm-zcode', 'bigmodel'), { kind: 'grant', payload: { authMode: 'api-key', scope: 'missing-key' } })
-  const auth = new ZcodeAuth({ store })
+  const auth = new ZcodeAuth({ store, upstream: new FixtureUpstream() })
   assert.equal((await auth.status('bigmodel')).state, 'error')
   await auth.useApiKey('bigmodel', 'fixture-replacement')
   const snapshot = await auth.snapshot('bigmodel')
-  assert.equal((await auth.credential(snapshot)).token, 'fixture-replacement')
+  assert.equal((await auth.credential(snapshot)).token, 'fixture-local-key')
   await auth.disconnect('bigmodel')
   auth.dispose()
 })
@@ -64,10 +65,12 @@ test('cancelled writes cannot change the active account and damaged pointers can
 test('opening quota status uses the cache while a manual refresh requests fresh platform data', async () => {
   const { service } = provider()
   let requests = 0
-  const auth = new ZcodeAuth({ store: new DshCredentialStore(service), fetch: async () => {
+  const upstream = new FixtureUpstream(method => {
+    if (method !== 'quota') return undefined
     requests++
-    return Response.json({ code: 0, data: { limits: [{ type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 20 }] } })
-  } })
+    return { balances: [], codingPlan: { limits: [{ type: 'TOKENS_LIMIT', percentage: 20 }] }, errors: [] }
+  })
+  const auth = new ZcodeAuth({ store: new DshCredentialStore(service), upstream })
   await auth.useApiKey('bigmodel', 'fixture-key')
   const runtime = new ZCodeRuntime(auth, () => ({ platform: 'bigmodel', concurrency: 2, maxTokens: 32000, timeoutMs: 300000, effort: 'high' }), () => {})
   const first = await runtime.readQuota('bigmodel')

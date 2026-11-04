@@ -1,44 +1,58 @@
-import type { Platform, QuotaSnapshot, QuotaWindow } from '../types.js'
-import { AuthError, number, object, requestJson, string, type Fetcher } from './http.js'
+import type { Plan, QuotaSnapshot, QuotaWindow } from '../types.js'
+import { AuthError, number, object, string } from './http.js'
 
-const ENDPOINTS: Record<Platform, string> = {
-  bigmodel: 'https://bigmodel.cn/api/monitor/usage/quota/limit',
-  zai: 'https://api.z.ai/api/monitor/usage/quota/limit',
+function timestamp(value: unknown): number | undefined {
+  const date = number(value)
+  if (date === undefined || date <= 0) return undefined
+  return date < 100_000_000_000 ? date * 1000 : date
 }
 
-function windowFrom(raw: unknown): QuotaWindow | undefined {
-  const value = object(raw)
-  const type = string(value?.type)
-  const unit = number(value?.unit)
-  const duration = number(value?.number)
-  let period: string | undefined
-  if (unit === 3 && duration === 5) period = '5 小时'
-  else if (unit === 6) period = '每周'
-  let name: string | undefined
-  if (period && type === 'TOKENS_LIMIT') name = `Token · ${period}`
-  if (period && type === 'CREDIT_LIMIT') name = `积分 · ${period}`
-  if (type === 'TIME_LIMIT' && unit === 5 && duration === 1) name = '工具调用'
+function balanceWindow(value: unknown): QuotaWindow | undefined {
+  const balance = object(value)
+  const name = string(balance?.showName)
   if (!name) return undefined
-  const percentage = number(value?.percentage)
-  const remaining = number(value?.remaining)
-  const limit = number(value?.usage)
-  const resetsAt = number(value?.nextResetTime)
+  const remaining = number(balance?.remainingUnits)
+  const limit = number(balance?.totalUnits)
+  const resetsAt = timestamp(balance?.expiresAt)
+  const unit = string(balance?.unitType)
   return {
-    name,
-    ...(percentage !== undefined && percentage >= 0 && percentage <= 100 ? { usedPercent: percentage } : {}),
+    name: name.slice(0, 512),
     ...(remaining !== undefined && remaining >= 0 ? { remaining } : {}),
     ...(limit !== undefined && limit >= 0 ? { limit } : {}),
-    ...(resetsAt !== undefined && resetsAt > 0 ? { resetsAt } : {}),
+    ...(resetsAt ? { resetsAt } : {}), ...(unit ? { unit: unit.slice(0, 128) } : {}),
   }
 }
 
-export async function fetchQuota(platform: Platform, token: string, fetcher: Fetcher, now: () => number, signal?: AbortSignal): Promise<QuotaSnapshot> {
-  const result = object(await requestJson(fetcher, ENDPOINTS[platform], { method: 'GET', headers: { authorization: token } }, signal))
-  if (!result || result.success === false || (result.code !== undefined && ![0, 200, '0', '200'].includes(result.code as string | number))) {
-    throw new AuthError('ZCODE_QUOTA_UNAVAILABLE')
+function codingWindow(value: unknown): QuotaWindow | undefined {
+  const item = object(value)
+  const type = string(item?.type)
+  const names: Record<string, string> = { TOKENS_LIMIT: 'Token', CREDIT_LIMIT: '积分', TIME_LIMIT: '工具调用' }
+  const name = type ? names[type] : undefined
+  if (!name) return undefined
+  const remaining = number(item?.remaining)
+  const limit = number(item?.total)
+  const usedPercent = number(item?.percentage)
+  const resetsAt = timestamp(item?.nextResetTime)
+  const unit = string(item?.unit)
+  return {
+    name, ...(remaining !== undefined && remaining >= 0 ? { remaining } : {}),
+    ...(limit !== undefined && limit >= 0 ? { limit } : {}),
+    ...(usedPercent !== undefined && usedPercent >= 0 && usedPercent <= 100 ? { usedPercent } : {}),
+    ...(resetsAt ? { resetsAt } : {}), ...(unit ? { unit: unit.slice(0, 128) } : {}),
   }
-  const payload = object(result.data)
-  if (!Array.isArray(payload?.limits)) throw new AuthError('ZCODE_INVALID_RESPONSE')
-  const windows = payload.limits.map(windowFrom).filter((value): value is QuotaWindow => value !== undefined)
-  return { updatedAt: now(), windows }
+}
+
+export function projectQuota(value: unknown, plan: Plan, now: number): QuotaSnapshot {
+  const result = object(value)
+  if (!result) throw new AuthError('ZCODE_QUOTA_UNAVAILABLE')
+  if (plan === 'start-plan') {
+    const errors = Array.isArray(result.errors) ? result.errors : []
+    if (!Array.isArray(result.balances) || errors.some(error => typeof error === 'string' && error.startsWith('balance:'))) {
+      throw new AuthError('ZCODE_QUOTA_UNAVAILABLE')
+    }
+    return { updatedAt: now, windows: result.balances.map(balanceWindow).filter((window): window is QuotaWindow => !!window) }
+  }
+  const coding = object(result.codingPlan)
+  if (!Array.isArray(coding?.limits)) throw new AuthError('ZCODE_QUOTA_UNAVAILABLE')
+  return { updatedAt: now, windows: coding.limits.map(codingWindow).filter((window): window is QuotaWindow => !!window) }
 }

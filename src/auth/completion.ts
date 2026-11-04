@@ -1,6 +1,21 @@
 import { AuthError } from './http.js'
+import type { LoginAttempt, Platform } from '../types.js'
 
 interface Outcome { errorCode?: string }
+
+export function validateLogin(value: LoginAttempt, platform: Platform, now: number): LoginAttempt {
+  if (!value || typeof value.attemptId !== 'string' || !value.attemptId ||
+    typeof value.expiresAt !== 'number' || !Number.isFinite(value.expiresAt) || value.expiresAt <= now) {
+    throw new AuthError('ZCODE_OAUTH_INVALID_RESPONSE')
+  }
+  let url: URL
+  try { url = new URL(value.authorizeUrl) } catch { throw new AuthError('ZCODE_OAUTH_INVALID_URL') }
+  const validHosts = platform === 'bigmodel' ? ['zcode.z.ai', 'bigmodel.cn', 'open.bigmodel.cn'] : ['zcode.z.ai', 'chat.z.ai']
+  if (url.protocol !== 'https:' || !validHosts.includes(url.hostname.toLowerCase()) || url.username || url.password || url.port) {
+    throw new AuthError('ZCODE_OAUTH_INVALID_URL')
+  }
+  return { attemptId: value.attemptId, authorizeUrl: url.href, expiresAt: value.expiresAt }
+}
 
 /** Retains a bounded, non-secret outcome for a single login attempt. */
 export class LoginCompletion {

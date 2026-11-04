@@ -7,7 +7,6 @@ import type { Settings } from '../config.js'
 import type { AccountSnapshot, AuthPort, RequestCredential } from '../types.js'
 import { buildRequest, parseStream, type ResolveImage } from '../protocol/index.js'
 import { RequestScheduler } from '../transport/scheduler.js'
-import { EndpointRouter } from '../transport/routing.js'
 import { httpFailure, retryAfter } from '../transport/http.js'
 import { MODELS, platformFor, planFor, providerName, resolveModel } from './catalog.js'
 import { startPlanResponseFailure } from '../transport/start-plan.js'
@@ -21,19 +20,16 @@ export interface AdapterDependencies {
   image?: ResolveImage
   sessionScope?: string
   scheduler?: RequestScheduler
-  routingWarning?: (reason: string) => void
 }
 
 export class ZCodeAdapter extends LlmAdapter {
   private readonly shutdown = new AbortController()
   private readonly series = new WeakMap<AbortSignal, Map<string, AccountSnapshot>>()
   private readonly scheduler: RequestScheduler
-  private readonly router: EndpointRouter
 
   constructor(private readonly dependencies: AdapterDependencies) {
     super()
     this.scheduler = dependencies.scheduler ?? new RequestScheduler()
-    this.router = new EndpointRouter({ fetch: dependencies.fetch, onWarning: dependencies.routingWarning })
   }
 
   override providerInfo(provider: string) {
@@ -45,7 +41,7 @@ export class ZCodeAdapter extends LlmAdapter {
       mode: 'normal', maxRetries: 1,
       retryableCodes: planFor(provider) === 'start-plan'
         ? ['SERVER', 'TIMEOUT', 'TRANSPORT']
-        : ['ZCODE_PAT_REJECTED', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
+        : ['RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
     }, 'dsh-zcode.retryPolicy')
   }
 
@@ -74,7 +70,6 @@ export class ZCodeAdapter extends LlmAdapter {
 
   dispose(): void {
     this.shutdown.abort(new LlmError('ZCode 插件已停止。', 'ABORTED'))
-    this.router.dispose()
     this.scheduler.dispose()
   }
 
@@ -128,15 +123,15 @@ export class ZCodeAdapter extends LlmAdapter {
       const accountKey = `${account.platform}:${account.scope}:${account.plan ?? 'coding-plan'}`
       release = await this.scheduler.acquire(accountKey, options.sessionId ?? session, settings.concurrency, signal)
       const credential = await this.dependencies.auth.credential(account, signal)
-      const route = await this.router.resolve(account, credential, signal)
+      const url = proxyEndpoint(credential)
       signal.throwIfAborted()
       if ((await this.dependencies.auth.status(account.platform, account.plan)).state === 'quota_exhausted') {
         throw new LlmError('套餐额度已用尽，请刷新用量查看重置时间。', 'QUOTA_EXHAUSTED')
       }
       signal.throwIfAborted()
-      const response = await (this.dependencies.fetch ?? fetch)(route.url, {
+      const response = await (this.dependencies.fetch ?? fetch)(url, {
         method: 'POST', redirect: 'error', signal, body: JSON.stringify(body),
-        headers: { ...requestHeaders(credential, session), ...route.headers },
+        headers: requestHeaders(credential, session),
       })
       if (account.plan === 'start-plan') {
         const failure = await startPlanResponseFailure(response)
@@ -191,13 +186,18 @@ function requestHeaders(credential: RequestCredential, session: string): Record<
     'anthropic-version': '2023-06-01', 'x-api-key': credential.token,
     authorization: `Bearer ${credential.token}`, 'x-session-id': session, 'x-request-id': randomUUID(),
   }
-  if (credential.kind === 'start-plan') {
-    if (!credential.deviceId) throw new LlmError('Start Plan 设备身份尚未准备好，请重启插件。', 'TRANSPORT')
-    headers['X-Device-Mid'] = credential.deviceId
-    headers['x-zcode-session-type'] = 'other'
-    headers['x-zcode-trace-id'] = randomUUID()
-  }
   return headers
+}
+
+function proxyEndpoint(credential: RequestCredential): string {
+  if (credential.kind !== 'proxy' || !credential.url) {
+    throw new LlmError('ZCode 本机代理尚未就绪，请重新连接。', 'TRANSPORT')
+  }
+  const url = new URL(credential.url)
+  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port || url.pathname !== '/v1/messages') {
+    throw new LlmError('ZCode 本机代理地址无效。', 'TRANSPORT')
+  }
+  return url.href
 }
 
 function isModelContent(chunk: StreamChunk): boolean {

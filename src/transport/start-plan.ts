@@ -31,6 +31,11 @@ function businessCode(value: unknown): string | undefined {
 }
 
 export function startPlanBusinessFailure(value: unknown, status?: number): LlmError | undefined {
+  const type = record(record(value)?.error)?.type
+  if (type === 'captcha_solver_failed' || type === 'captcha_verification_required') {
+    return new LlmError('Start Plan 需要在平台完成安全验证，请返回 ZCode 检查验证状态。',
+      'ZCODE_VERIFICATION_REQUIRED', status === undefined ? undefined : { status })
+  }
   const upstreamCode = businessCode(value)
   if (!upstreamCode) return undefined
   const description = failures[upstreamCode] ?? {

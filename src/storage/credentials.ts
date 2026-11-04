@@ -83,8 +83,11 @@ function identity(record: CredentialRecord | undefined): string | undefined {
   if (record?.kind !== 'grant' || !record.payload || typeof record.payload !== 'object') return undefined
   const payload = record.payload as Record<string, unknown>
   if (payload.authMode === 'api-key' && typeof payload.scope === 'string') return `api-key:${payload.scope}`
-  return typeof payload.scope === 'string' && typeof payload.oauthAccessToken === 'string' && typeof payload.zcodeToken === 'string'
-    ? `grant:${payload.scope}` : undefined
+  const upstream = payload.upstream as Record<string, unknown> | undefined
+  const current = upstream && (upstream.provider === 'bigmodel' || upstream.provider === 'zai') &&
+    typeof upstream.apiKey === 'string' && upstream.apiKey.length > 0
+  const legacy = typeof payload.oauthAccessToken === 'string' && typeof payload.zcodeToken === 'string'
+  return typeof payload.scope === 'string' && (current || legacy) ? `grant:${payload.scope}` : undefined
 }
 
 function fingerprint(record: CredentialRecord): string {

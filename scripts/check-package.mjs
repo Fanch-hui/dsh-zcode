@@ -8,7 +8,8 @@ const targets = Object.values(manifest.exports).flatMap(entry => typeof entry ==
 targets.push(...Object.values(manifest.bin ?? {}))
 await Promise.all(targets.map(target => access(new URL(target, root))))
 await Promise.all(['cordis.patch.yml', 'LICENSE', 'README.md', 'THIRD_PARTY_NOTICES.md',
-  'lib/cli/THIRD_PARTY_LICENSES.txt'].map(path => access(new URL(path, root))))
+  'lib/cli/THIRD_PARTY_LICENSES.txt', 'lib/proxy/upstream.cjs',
+  'lib/proxy/THIRD_PARTY_LICENSES.txt', 'vendor/zcode-api/LICENSE'].map(path => access(new URL(path, root))))
 const host = await import(new URL(manifest.main, root))
 assert.equal(typeof host.apply, 'function')
 assert.equal(host.name, 'llm-zcode')

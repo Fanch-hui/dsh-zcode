@@ -56,12 +56,8 @@ export async function httpFailure(response: Response, account: AccountSnapshot,
   }
   await response.body?.cancel()
   if (status === 401) {
-    if (credential.kind === 'pat') {
-      auth.reject(account, credential)
-      return new LlmError('ZCode 短期凭据已失效，请重试当前步骤。', 'ZCODE_PAT_REJECTED', { status })
-    }
-    auth.markState(account, 'reauth_required', 'AUTH')
-    return new LlmError('套餐 Key 已失效，请更新插件凭据后继续。', 'AUTH', { status })
+    auth.reject(account, credential)
+    return new LlmError('ZCode 登录已失效，请重新连接后继续。', 'AUTH', { status })
   }
   if (status === 403) return new LlmError('平台拒绝访问，请检查套餐权益与接入权限。', 'PERMISSION', { status })
   if (status === 402) {

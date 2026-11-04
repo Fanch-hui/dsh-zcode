@@ -1,9 +1,9 @@
 {
   "name": "dsh-zcode",
-  "version": "0.1.4",
-  "description": "ZCode Coding Plan providers for DeepSeek Harness",
+  "version": "0.2.0",
+  "description": "DeepSeek Harness adapter for the zcode-api proxy",
   "type": "module",
-  "license": "Apache-2.0",
+  "license": "Apache-2.0 AND CC-BY-NC-SA-4.0",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "bin": {
@@ -27,6 +27,9 @@
   },
   "files": [
     "lib",
+    "vendor/zcode-api",
+    "integration",
+    "scripts/build-proxy.mjs",
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
@@ -49,25 +52,32 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts && node --test tests/cli-package.test.mjs",
-    "build": "tsc -p tsconfig.build.json && node scripts/build-cli.mjs && node scripts/build-client.mjs",
+    "pretest": "node scripts/build-proxy.mjs",
+    "test": "node --import tsx --test tests/*.test.ts && node --test tests/*.test.mjs",
+    "build": "node scripts/clean-build.mjs && tsc -p tsconfig.build.json && node scripts/build-proxy.mjs && node scripts/build-cli.mjs && node scripts/build-client.mjs",
     "prepack": "npm run build && node scripts/check-package.mjs"
   },
   "dependencies": {
     "undici": "^8.10.0",
+    "yaml": "^2.9.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.1.0",
     "@deepseek-ai/dsh-api-remotes": "0.2.2-rc.1",
     "@deepseek-ai/dsh-app-boot": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-atomic-write": "0.2.2-rc.1",
     "@deepseek-ai/dsh-attachment": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-authorization": "0.2.2-rc.1",
     "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.2-rc.1",
     "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
     "@deepseek-ai/dsh-client-ui-renderer": "0.2.2-rc.1",
     "@deepseek-ai/dsh-client-ui-settings": "0.2.2-rc.1",
     "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
     "@deepseek-ai/dsh-credentials": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-credentials-local": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-launch-environment": "0.2.2-rc.1",
     "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
     "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.1",
     "@deepseek-ai/dsh-typert-registry": "0.2.2-rc.1",
@@ -77,31 +87,26 @@
     "esbuild": "^0.28.2",
     "react": "18.3.1",
     "tsx": "^4.20.0",
-    "typescript": "^5.9.0",
-    "@deepseek-ai/dsh-authorization": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-credentials-local": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-home-paths": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-atomic-write": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-launch-environment": "0.2.2-rc.1"
+    "typescript": "^5.9.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.6-alpha.2",
     "@deepseek-ai/dsh-api-remotes": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/dsh-app-boot": ">=0.2.2-alpha.3 <0.3.0",
+    "@deepseek-ai/dsh-atomic-write": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/dsh-attachment": ">=0.2.2-alpha.3 <0.3.0",
+    "@deepseek-ai/dsh-authorization": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/dsh-client-ui-plugin-manager": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/dsh-client-ui-slots": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/dsh-credentials": ">=0.2.2-alpha.3 <0.3.0",
+    "@deepseek-ai/dsh-credentials-local": ">=0.2.2-alpha.3 <0.3.0",
+    "@deepseek-ai/dsh-home-paths": ">=0.2.2-alpha.3 <0.3.0",
+    "@deepseek-ai/dsh-launch-environment": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/dsh-llm": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/dsh-typert-protocol": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/dsh-typert-registry": ">=0.2.2-alpha.3 <0.3.0",
     "@deepseek-ai/schemastery": "^3.18.6-alpha.2",
-    "react": "18.3.1",
-    "@deepseek-ai/dsh-authorization": ">=0.2.2-alpha.3 <0.3.0",
-    "@deepseek-ai/dsh-credentials-local": ">=0.2.2-alpha.3 <0.3.0",
-    "@deepseek-ai/dsh-home-paths": ">=0.2.2-alpha.3 <0.3.0",
-    "@deepseek-ai/dsh-atomic-write": ">=0.2.2-alpha.3 <0.3.0",
-    "@deepseek-ai/dsh-launch-environment": ">=0.2.2-alpha.3 <0.3.0"
+    "react": "18.3.1"
   }
 }

@@ -10,7 +10,7 @@ import { PROVIDERS } from './provider/catalog.js'
 import { ZCodeRuntime } from './runtime.js'
 import { DshCredentialStore } from './storage/credentials.js'
 import { createDeviceId } from './storage/device.js'
-import { createNetwork } from './transport/network.js'
+import { UpstreamManager } from './proxy/manager.js'
 import { registerAuthorizationFlows } from './cli/authorization.js'
 
 export { Config }
@@ -18,18 +18,16 @@ export const name = 'llm-zcode'
 export const inject = ['llm', 'credentials', 'typert', 'attachments', 'profileContext']
 
 export function apply(ctx: Context, config: Config): void {
-  const network = createNetwork()
+  const upstream = new UpstreamManager({ deviceId: createDeviceId(ctx.profileContext.dir) })
   const settings = () => readSettings(config)
   let runtime: ZCodeRuntime | undefined
   const auth = new ZcodeAuth({
-    store: new DshCredentialStore(ctx.credentials), fetch: network.fetch,
-    deviceId: createDeviceId(ctx.profileContext.dir),
+    store: new DshCredentialStore(ctx.credentials), upstream,
     onChange: account => runtime?.onAccountChanged(account),
   })
   runtime = new ZCodeRuntime(auth, settings, provider => ctx.emit('llm/models-updated', provider))
   const adapter = new ZCodeAdapter({
-    auth, settings, fetch: network.fetch, sessionScope: ctx.profileContext.dir,
-    routingWarning: reason => ctx.logger.warn(`ZCode 路由配置刷新失败：${reason}。`),
+    auth, settings, sessionScope: ctx.profileContext.dir,
     image: async (block, signal) => {
       const image = await ctx.attachments.readImage(block.attachment, signal)
       return `data:${image.ref.mediaType};base64,${Buffer.from(image.data).toString('base64')}`
@@ -57,6 +55,6 @@ export function apply(ctx: Context, config: Config): void {
     adapter.dispose()
     runtime?.dispose()
     auth.dispose()
-    void network.dispose().catch(() => {})
+    upstream.dispose()
   })
 }

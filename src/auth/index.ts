@@ -1,78 +1,29 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import type { AccountSnapshot, AccountState, AccountStatus, AuthPort, LoginAttempt, Plan, Platform, QuotaSnapshot, RequestCredential } from '../types.js'
-import { AuthError, waitFor, type Fetcher } from './http.js'
-import { initOAuth, pollOAuth, type OAuthInit } from './oauth.js'
-import { PatManager } from './pat.js'
-import { fetchQuota } from './quota.js'
-import { StartPlanQuotaCache } from './start-plan.js'
-import { LoginCompletion } from './completion.js'
-import { readAccount, scopeOf, type CredentialStore, type KeyLocation, type StoredAccount, type StoredGrant } from './types.js'
+import type { UpstreamCredential, UpstreamPort } from '../proxy/types.js'
+import { AuthError, waitFor } from './http.js'
+import { projectQuota } from './quota.js'
+import { LoginCompletion, validateLogin } from './completion.js'
+import { readAccount, scopeOf, type CredentialStore, type StoredAccount, type StoredGrant } from './types.js'
+import { identityOf, newSlot, publicStatus, type Attempt, type Slot } from './state.js'
 
 export type { CredentialStore, KeyLocation, StoredAccount, StoredGrant } from './types.js'
 export { AuthError } from './http.js'
 
-interface Attempt {
-  id: string
-  controller: AbortController
-  init?: OAuthInit
-  committing: boolean
-  committed?: string
-  cleanup?: () => void
-  completion: LoginCompletion
-  previousState: AccountState
-  previousError?: string
-}
-interface Slot {
-  platform: Platform
-  generation: number
-  state: AccountState
-  errorCode?: string
-  record?: StoredAccount
-  load?: Promise<void>
-  loaded: boolean
-  controller: AbortController
-  revoked?: string
-  attempt?: Attempt
-  attempts: Map<string, Attempt>
-  write: Promise<void>
-  pat?: PatManager
-  quota?: QuotaSnapshot
-  quotaPending?: Promise<QuotaSnapshot>
-}
-
 export interface AuthOptions {
   store: CredentialStore
-  fetch?: Fetcher
+  upstream: UpstreamPort
   now?: () => number
-  random?: () => number
-  deviceId?: () => Promise<string>
   onChange?: (status: AccountStatus) => void
-}
-
-function newSlot(platform: Platform): Slot {
-  return { platform, state: 'signed_out', generation: 0, loaded: false, controller: new AbortController(), attempts: new Map(), write: Promise.resolve() }
-}
-
-function identityOf(record: StoredAccount): string {
-  return `${record.kind}:${scopeOf(record)}`
 }
 
 export class ZcodeAuth implements AuthPort {
   private readonly slots = new Map<Platform, Slot>([['bigmodel', newSlot('bigmodel')], ['zai', newSlot('zai')]])
-  private readonly fetcher: Fetcher
   private readonly now: () => number
-  private readonly random: () => number
-  private readonly deviceId: () => Promise<string>
-  private readonly startPlanQuota: StartPlanQuotaCache
   private disposed = false
 
   constructor(private readonly options: AuthOptions) {
-    this.fetcher = options.fetch ?? fetch
     this.now = options.now ?? Date.now
-    this.random = options.random ?? Math.random
-    const runtimeDeviceId = randomUUID()
-    this.deviceId = options.deviceId ?? (() => Promise.resolve(runtimeDeviceId))
-    this.startPlanQuota = new StartPlanQuotaCache(this.fetcher, this.now)
   }
 
   private async ensure(platform: Platform): Promise<Slot> {
@@ -100,24 +51,8 @@ export class ZcodeAuth implements AuthPort {
     return slot
   }
 
-  private publicStatus(slot: Slot): AccountStatus {
-    const record = slot.record
-    const login: LoginAttempt | undefined = slot.attempt?.init?.attempt
-    const status: AccountStatus = {
-      platform: slot.platform, state: slot.state, generation: slot.generation,
-    }
-    if (record) {
-      status.authMode = record.kind === 'grant' ? 'oauth' : 'api-key'
-      status.scope = scopeOf(record)
-    }
-    if (record?.kind === 'grant' && record.payload.accountLabel) status.accountLabel = record.payload.accountLabel
-    if (login) status.login = login
-    if (slot.errorCode) status.errorCode = slot.errorCode
-    return status
-  }
-
   private changed(slot: Slot): void {
-    try { this.options.onChange?.(this.publicStatus(slot)) } catch { /* observer failures cannot veto state */ }
+    try { this.options.onChange?.(publicStatus(slot)) } catch { /* observer failures cannot veto state */ }
   }
 
   private serial<T>(slot: Slot, task: () => Promise<T>): Promise<T> {
@@ -129,8 +64,9 @@ export class ZcodeAuth implements AuthPort {
   private settleAttempt(attempt: Attempt, errorCode?: string): void {
     attempt.cleanup?.()
     attempt.cleanup = undefined
-    attempt.init = undefined
+    attempt.login = undefined
     attempt.completion.settle(errorCode)
+    this.options.upstream.release(attempt.platform, attempt.workerScope)
   }
 
   private cancelAttempt(slot: Slot): void {
@@ -161,9 +97,9 @@ export class ZcodeAuth implements AuthPort {
     slot.controller.abort(new AuthError('ZCODE_ACCOUNT_CHANGED'))
     slot.controller = new AbortController()
     slot.generation++
-    slot.pat = undefined
-    slot.quota = undefined
-    slot.quotaPending = undefined
+    slot.migration = undefined
+    slot.quotas.clear()
+    this.options.upstream.invalidate(slot.platform)
   }
 
   private assertAttempt(slot: Slot, attempt: Attempt): void {
@@ -209,7 +145,7 @@ export class ZcodeAuth implements AuthPort {
   async status(platform: Platform, plan?: Plan): Promise<AccountStatus> {
     const slot = await this.ensure(platform)
     await this.reconcile(platform)
-    const status = this.publicStatus(slot)
+    const status = publicStatus(slot)
     if (plan !== 'start-plan') return status
     status.plan = plan
     if (slot.record?.kind === 'grant' && status.state === 'quota_exhausted') {
@@ -232,7 +168,10 @@ export class ZcodeAuth implements AuthPort {
     const previousError = slot.attempt?.previousError ?? slot.errorCode
     this.cancelAttempt(slot)
     if (slot.attempt) throw new AuthError('ZCODE_OAUTH_COMMITTING')
-    const attempt: Attempt = { id: randomUUID(), controller: new AbortController(), committing: false, completion: new LoginCompletion(), previousState, previousError }
+    const id = randomUUID()
+    const workerScope = `auth:${id}`
+    const attempt: Attempt = { id, platform, workerScope, controller: new AbortController(), engine: this.options.upstream.get(platform, workerScope),
+      committing: false, completion: new LoginCompletion(), previousState, previousError }
     slot.attempt = attempt
     slot.attempts.set(attempt.id, attempt)
     for (const [id, previous] of slot.attempts) {
@@ -253,12 +192,14 @@ export class ZcodeAuth implements AuthPort {
     slot.errorCode = undefined
     this.changed(slot)
     try {
-      const init = await initOAuth(platform, attempt.id, this.fetcher, this.now, attempt.controller.signal)
+      const init = await attempt.engine.rpc<LoginAttempt>('beginLogin', undefined, attempt.controller.signal)
       this.assertAttempt(slot, attempt)
-      attempt.init = init
+      const login = validateLogin(init, platform, this.now())
+      attempt.workerId = login.attemptId
+      attempt.login = { ...login, attemptId: attempt.id }
       this.changed(slot)
-      void this.finishLogin(slot, attempt, init)
-      return this.publicStatus(slot)
+      void this.finishLogin(slot, attempt)
+      return publicStatus(slot)
     } catch (error) {
       this.settleAttempt(attempt, error instanceof AuthError ? error.code : 'ZCODE_OAUTH_FAILED')
       if (slot.attempt === attempt) {
@@ -271,15 +212,14 @@ export class ZcodeAuth implements AuthPort {
     }
   }
 
-  private async finishLogin(slot: Slot, attempt: Attempt, init: OAuthInit): Promise<void> {
+  private async finishLogin(slot: Slot, attempt: Attempt): Promise<void> {
     try {
-      const grant = await pollOAuth(slot.platform, init, this.fetcher, this.now, attempt.controller.signal)
+      const grant = await attempt.engine.rpc<UpstreamCredential>('completeLogin', { attemptId: attempt.workerId }, attempt.controller.signal)
       this.assertAttempt(slot, attempt)
-      const identity = createHash('sha256').update(`zcode\0${slot.platform}\0${grant.userId}`).digest('hex')
-      const scope = `${identity}.${randomBytes(16).toString('hex')}`
+      if (grant.provider !== slot.platform || !grant.apiKey) throw new AuthError('ZCODE_OAUTH_INVALID_RESPONSE')
+      const scope = randomBytes(24).toString('hex')
       const account: StoredGrant = { kind: 'grant', payload: {
-        schemaVersion: 1, platform: slot.platform, scope, oauthAccessToken: grant.accessToken, zcodeToken: grant.zcodeToken,
-        ...(grant.accountLabel ? { accountLabel: grant.accountLabel.slice(0, 120) } : {}),
+        schemaVersion: 1, platform: slot.platform, scope, upstream: grant,
       } }
       await this.serial(slot, async () => {
         this.assertAttempt(slot, attempt)
@@ -295,12 +235,6 @@ export class ZcodeAuth implements AuthPort {
         slot.errorCode = undefined
         this.changed(slot)
         this.settleAttempt(attempt)
-      })
-      void this.snapshot(slot.platform).then(snapshot => this.credential(snapshot)).catch(error => {
-        if (slot.record === account && error instanceof AuthError) {
-          slot.errorCode = error.code
-          this.changed(slot)
-        }
       })
     } catch (error) {
       if (error instanceof AuthError && error.code === 'ZCODE_ACCOUNT_CHANGED') {
@@ -413,53 +347,58 @@ export class ZcodeAuth implements AuthPort {
 
   async credential(snapshot: AccountSnapshot, signal?: AbortSignal): Promise<RequestCredential> {
     const slot = await this.ensure(snapshot.platform)
+    const credential = await this.upstreamCredential(slot, snapshot, signal)
+    const plan = snapshot.plan ?? 'coding-plan'
+    const engine = this.options.upstream.get(snapshot.platform, `${snapshot.scope}:${plan}`)
+    const url = await waitFor(engine.start(plan, credential, snapshot.signal), signal)
     await waitFor(this.reconcile(snapshot.platform), signal)
     this.assertSnapshot(slot, snapshot)
-    signal?.throwIfAborted()
-    const record = slot.record!
-    if (snapshot.plan === 'start-plan') {
-      if (record.kind !== 'grant') throw new AuthError('ZCODE_START_LOGIN_REQUIRED')
-      const combined = signal ? AbortSignal.any([snapshot.signal, signal]) : snapshot.signal
-      const deviceId = (await waitFor(this.deviceId(), combined)).trim()
-      if (!deviceId || !/^[\x20-\x7e]+$/.test(deviceId)) throw new AuthError('ZCODE_DEVICE_ID_UNAVAILABLE')
-      await waitFor(this.reconcile(snapshot.platform), combined)
-      this.assertSnapshot(slot, snapshot)
-      combined.throwIfAborted()
-      const current = slot.record!
-      if (current.kind !== 'grant') throw new AuthError('ZCODE_START_LOGIN_REQUIRED')
-      return { token: current.payload.zcodeToken, kind: 'start-plan', revision: slot.generation, deviceId }
-    }
-    if (record.kind === 'api-key') return { token: record.key, kind: 'api-key', revision: slot.generation }
-    if (!slot.pat) slot.pat = new PatManager({
-      platform: slot.platform, grant: record, fetch: this.fetcher, now: this.now, random: this.random,
-      signal: slot.controller.signal, check: () => this.assertSnapshot(slot, snapshot),
-      setLocation: location => this.setLocation(slot, snapshot, location),
-    })
-    try {
-      const result = await slot.pat.resolve(signal)
-      await waitFor(this.reconcile(snapshot.platform), signal)
-      this.assertSnapshot(slot, snapshot)
-      return result
-    }
-    catch (error) {
-      signal?.throwIfAborted()
-      await this.reconcile(snapshot.platform)
-      this.assertSnapshot(slot, snapshot)
-      if (error instanceof AuthError && error.status === 401) this.markState(snapshot, 'reauth_required', 'ZCODE_LOGIN_REQUIRED')
-      throw error
-    }
+    return { token: engine.apiKey, kind: 'proxy', url, revision: slot.generation }
   }
 
-  private async setLocation(slot: Slot, snapshot: AccountSnapshot, location: KeyLocation | undefined): Promise<void> {
+  private async upstreamCredential(slot: Slot, snapshot: AccountSnapshot, signal?: AbortSignal): Promise<UpstreamCredential> {
+    await waitFor(this.reconcile(snapshot.platform), signal)
+    this.assertSnapshot(slot, snapshot)
+    const record = slot.record!
+    if (record.kind === 'api-key') {
+      if (snapshot.plan === 'start-plan') throw new AuthError('ZCODE_START_LOGIN_REQUIRED')
+      const dot = record.key.indexOf('.')
+      return dot > 0 && dot < record.key.length - 1
+        ? { provider: slot.platform, apiKey: record.key.slice(0, dot), secret: record.key.slice(dot + 1) }
+        : { provider: slot.platform, apiKey: record.key }
+    }
+    if (record.payload.upstream) return this.checkPlanCredential(record.payload.upstream, snapshot)
+    if (!record.payload.oauthAccessToken || !record.payload.zcodeToken) throw new AuthError('ZCODE_CREDENTIAL_INVALID')
+    if (!slot.migration) {
+      const task = this.migrateGrant(slot, snapshot, record).finally(() => {
+        if (slot.migration === task) slot.migration = undefined
+      })
+      slot.migration = task
+    }
+    const credential = await waitFor(slot.migration, signal)
+    this.assertSnapshot(slot, snapshot)
+    return this.checkPlanCredential(credential, snapshot)
+  }
+
+  private checkPlanCredential(credential: UpstreamCredential, snapshot: AccountSnapshot): UpstreamCredential {
+    if (snapshot.plan === 'start-plan' && !credential.jwt) throw new AuthError('ZCODE_START_LOGIN_REQUIRED')
+    return credential
+  }
+
+  private async migrateGrant(slot: Slot, snapshot: AccountSnapshot, record: StoredGrant): Promise<UpstreamCredential> {
+    const engine = this.options.upstream.get(slot.platform, 'auth')
+    const credential = await engine.rpc<UpstreamCredential>('resolve', {
+      accessToken: record.payload.oauthAccessToken, zcodeToken: record.payload.zcodeToken,
+    }, snapshot.signal)
+    if (credential.provider !== slot.platform || !credential.apiKey) throw new AuthError('ZCODE_CREDENTIAL_INVALID')
+    await this.reconcile(slot.platform)
+    this.assertSnapshot(slot, snapshot)
     try {
       await this.serial(slot, async () => {
         this.assertSnapshot(slot, snapshot)
         if (slot.record?.kind !== 'grant') throw new AuthError('ZCODE_ACCOUNT_CHANGED')
         const expected = slot.record
-        const payload = { ...expected.payload }
-        if (location) payload.location = location
-        else delete payload.location
-        const updated: StoredGrant = { kind: 'grant', payload }
+        const updated: StoredGrant = { kind: 'grant', payload: { ...expected.payload, upstream: credential } }
         await this.options.store.save(slot.platform, updated, () => this.assertSnapshot(slot, snapshot), expected)
         this.assertSnapshot(slot, snapshot)
         slot.record = updated
@@ -468,62 +407,59 @@ export class ZcodeAuth implements AuthPort {
       if (error instanceof AuthError && error.code === 'ZCODE_ACCOUNT_CHANGED') await this.reconcile(slot.platform)
       throw error
     }
+    return credential
   }
 
   reject(snapshot: AccountSnapshot, credential: RequestCredential): void {
     const slot = this.slots.get(snapshot.platform)
     if (!slot) return
     try { this.assertSnapshot(slot, snapshot) } catch { return }
-    if (credential.kind === 'pat') slot.pat?.invalidate(credential)
-    else if (credential.revision === slot.generation) this.markState(snapshot, 'reauth_required',
-      credential.kind === 'start-plan' ? 'ZCODE_LOGIN_REQUIRED' : 'ZCODE_API_KEY_REJECTED')
+    if (credential.revision === slot.generation) {
+      this.markState(snapshot, 'reauth_required', snapshot.mode === 'oauth' ? 'ZCODE_LOGIN_REQUIRED' : 'ZCODE_API_KEY_REJECTED')
+    }
   }
 
   async queryQuota(snapshot: AccountSnapshot, signal?: AbortSignal, force = false): Promise<QuotaSnapshot> {
     const slot = await this.ensure(snapshot.platform)
     await waitFor(this.reconcile(snapshot.platform), signal)
     this.assertSnapshot(slot, snapshot)
-    if (snapshot.plan === 'start-plan') {
-      try {
-        const quota = await this.startPlanQuota.query(snapshot, () => this.credential(snapshot), async () => {
-          await this.reconcile(snapshot.platform)
-          this.assertSnapshot(slot, snapshot)
-        }, signal, force)
-        await waitFor(this.reconcile(snapshot.platform), signal)
-        this.assertSnapshot(slot, snapshot)
-        return quota
-      } catch (error) {
-        if (error instanceof AuthError && error.status === 401) this.markState(snapshot, 'reauth_required', 'ZCODE_LOGIN_REQUIRED')
-        throw error
-      }
-    }
-    if (!force && slot.quota && this.now() - slot.quota.updatedAt < 60_000) return slot.quota
-    if (!slot.quotaPending) {
-      const request = (async () => {
-        const credential = await this.credential(snapshot)
-        const quota = await fetchQuota(snapshot.platform, credential.token, this.fetcher, this.now, snapshot.signal)
+    const plan = snapshot.plan ?? 'coding-plan'
+    let entry = slot.quotas.get(plan)
+    if (!entry) { entry = {}; slot.quotas.set(plan, entry) }
+    if (!force && entry.value && this.now() - entry.value.updatedAt < 60_000) return entry.value
+    if (!entry.pending) {
+      const owner = entry
+      const task = (async () => {
+        const credential = await this.upstreamCredential(slot, snapshot, snapshot.signal)
+        const engine = this.options.upstream.get(snapshot.platform, `${snapshot.scope}:${plan}`)
+        const raw = await engine.rpc<unknown>('quota', { credential, plan }, snapshot.signal)
+        const quota = projectQuota(raw, plan, this.now())
         await this.reconcile(snapshot.platform)
         this.assertSnapshot(slot, snapshot)
-        slot.quota = quota
-        const measured = quota.windows.filter(window => (window.name.startsWith('Token · ') || window.name.startsWith('积分 · ')) &&
-          (window.remaining !== undefined || window.usedPercent !== undefined))
-        const exhausted = measured.some(window => window.remaining === 0 || window.usedPercent === 100)
-        if (exhausted) {
-          slot.state = 'quota_exhausted'
-          slot.errorCode = 'ZCODE_QUOTA_EXHAUSTED'
-          this.changed(slot)
-        } else if (slot.state === 'quota_exhausted' && measured.length > 0) {
-          slot.state = 'ready'
-          slot.errorCode = undefined
-          this.changed(slot)
-        }
+        owner.value = quota
+        if (plan === 'coding-plan') this.applyQuotaState(slot, quota)
         return quota
-      })().finally(() => { if (slot.quotaPending === request) slot.quotaPending = undefined })
-      slot.quotaPending = request
+      })().finally(() => { if (owner.pending === task) owner.pending = undefined })
+      entry.pending = task
     }
-    const quota = await waitFor(slot.quotaPending, signal)
+    const quota = await waitFor(entry.pending, signal)
     this.assertSnapshot(slot, snapshot)
     return quota
+  }
+
+  private applyQuotaState(slot: Slot, quota: QuotaSnapshot): void {
+    const measured = quota.windows.filter(window => (window.name === 'Token' || window.name === '积分') &&
+      (window.remaining !== undefined || window.usedPercent !== undefined))
+    const exhausted = measured.some(window => window.remaining === 0 || window.usedPercent === 100)
+    if (exhausted) {
+      slot.state = 'quota_exhausted'
+      slot.errorCode = 'ZCODE_QUOTA_EXHAUSTED'
+      this.changed(slot)
+    } else if (slot.state === 'quota_exhausted' && measured.length > 0) {
+      slot.state = 'ready'
+      slot.errorCode = undefined
+      this.changed(slot)
+    }
   }
 
   markState(snapshot: AccountSnapshot, state: 'reauth_required' | 'quota_exhausted', errorCode: string): void {
@@ -538,7 +474,6 @@ export class ZcodeAuth implements AuthPort {
 
   dispose(): void {
     this.disposed = true
-    this.startPlanQuota.dispose()
     for (const slot of this.slots.values()) {
       const attempt = slot.attempt
       attempt?.cleanup?.()
@@ -548,9 +483,9 @@ export class ZcodeAuth implements AuthPort {
         slot.attempt = undefined
       }
       slot.controller.abort()
-      slot.pat = undefined
-      slot.quota = undefined
-      slot.quotaPending = undefined
+      slot.migration = undefined
+      slot.quotas.clear()
+      this.options.upstream.invalidate(slot.platform)
     }
   }
 }

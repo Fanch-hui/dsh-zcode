@@ -7,7 +7,7 @@ const account: AccountSnapshot = {
   platform: 'zai', scope: 'fixture-account', generation: 1,
   mode: 'oauth', signal: new AbortController().signal,
 }
-const credential: RequestCredential = { kind: 'pat', token: 'fixture-pat', revision: 1 }
+const credential: RequestCredential = { kind: 'proxy', token: 'fixture-local-key', revision: 1, url: 'http://127.0.0.1:12345/v1/messages' }
 
 test('distinguishes temporary Z.AI restrictions from quota and permission failures sharing HTTP 429', async t => {
   const cases = [

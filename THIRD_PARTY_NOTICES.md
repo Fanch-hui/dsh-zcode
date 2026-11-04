@@ -1,42 +1,33 @@
 # Third-party sources and notices
 
-DSH ZCode is licensed under Apache-2.0. Its source is an independently written DSH adapter based on the following public contracts.
+## zcode-api
 
-## ZCode
+- Repository: https://github.com/TriDefender/zcode-api
+- Author: TriDefender and upstream contributors.
+- Reference commit: `158e7653b738cbed0996243eeabd26f816638e81` (`4.8.8.android`).
+- License: CC BY-NC-SA 4.0, preserved in `vendor/zcode-api/LICENSE`.
+- Source: `vendor/zcode-api`. The proxy bundle directly includes upstream authentication, configuration, request transformation, transport, protocol handling, and quota modules.
+- Integration source: `integration`, built by `scripts/build-proxy.mjs`. These adaptations of the proxy are distributed under CC-BY-NC-SA-4.0.
+- Integration changes: private IPC lifecycle and in-memory DSH credentials; loopback binding with a random port and temporary API key; model-request verification policy support and required-verification errors; disabled optional claim, MCP, Responses, and async features.
+- Bundled dependency licenses: `lib/proxy/THIRD_PARTY_LICENSES.txt`.
 
-- Repository: https://github.com/zai-org/ZCode
-- Reference commit: `a9fe401eede6e6e5e01be9048679c206fe6f02d9` (v3.17.2)
-- License: Apache-2.0; upstream copyright and notices remain with their authors.
-- Protocol references: CLI OAuth initialization/polling, personal Coding Plan key metadata, Project Access Tokens, Z.AI business login, quota response fields, official gateway routing, model option maps, and `config/provider/zcode-builtin.json` revision 43.
-- Sources: `apps/zcode-cli/packages/adapters/src/auth/cli-oauth.ts`, `docs/model-provider-project-access-token.md`, `apps/zcode-cli/packages/adapters/src/model/official-coding-plan-gateway.ts`, and the provider catalog.
-- Dynamic routing contract: `apps/zcode-cli/docs/design/v2/model/provider-endpoint-routing.md`.
-- Start Plan contracts: `docs/zai-start-plan-provider.md`, `docs/start-plan-provider-business-errors.md`, and `docs/zcode-endpoint-device-mid-header.md`.
-
-The plugin implements these public request and response contracts in its own modules. It uses the public request-security edition, whose implementation is a transport pass-through.
+The source snapshot and integration source accompany the package. Attribution and share-alike terms for the proxy component apply to its redistribution and modification.
 
 ## DeepSeek Harness
 
 - Repository: https://github.com/deepseek-ai/deepseek-harness
-- Reference release: `dsh-v0.2.2-rc.1` (`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`)
-- Compatibility baseline: `dsh-v0.2.2-alpha.3` (`05b1cae8db6e674c5685101494d4eec24652424a`)
-- License: MIT. Host and browser DSH/Cordis packages are peer dependencies supplied by the host. The standalone CLI bundles its required service runtime; bundled package licenses accompany the CLI artifact.
-- Contract references: `LlmAdapter`, `StreamChunk`, replay envelopes, credentials, volatile Config, Typert RPC, and browser lazy-CJS plugin factories.
-- The browser build follows DSH's documented factory format and links the host's React, Zod and UI primitives.
+- Reference release: `dsh-v0.2.2-rc.1` (`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`).
+- Compatibility baseline: `dsh-v0.2.2-alpha.3` (`05b1cae8db6e674c5685101494d4eec24652424a`).
+- License: MIT. Host and browser shared packages are provided by DSH. The standalone CLI bundles the required credential service runtime; its dependency licenses are in `lib/cli/THIRD_PARTY_LICENSES.txt`.
+- Contracts: `LlmAdapter`, stream chunks, replay envelopes, credentials, volatile configuration, Typert RPC, and browser plugin factories.
 
-## zcode-api
+## ZCode model catalog
 
-- Repository: https://github.com/TriDefender/zcode-api
-- Reference commit: `158e7653b738cbed0996243eeabd26f816638e81` (4.8.8.android)
-- License: CC BY-NC-SA 4.0.
-- Used as a behavioral reference for Coding Plan routing and Anthropic compatibility. The distributed plugin contains independently written code and uses its own DSH adapter and UI.
+- Repository: https://github.com/zai-org/ZCode
+- Reference commit: `a9fe401eede6e6e5e01be9048679c206fe6f02d9` (v3.17.2).
+- License: Apache-2.0.
+- Reference: `config/provider/zcode-builtin.json`, revision 43, for DSH model capability declarations.
 
-## Z.AI
+## DSH adapter and runtime dependencies
 
-- HTTP and business error semantics: https://docs.z.ai/api-reference/api-code
-
-## Runtime dependencies
-
-- Undici: MIT, https://github.com/nodejs/undici
-- Zod: MIT, https://github.com/colinhacks/zod
-
-Their packages carry their respective license files. Development tools retain their upstream licenses.
+The DSH adapter source in `src` is licensed under Apache-2.0. Undici and Zod retain their MIT licenses; YAML retains its ISC license. Their packages include the respective license files. Development tools retain their upstream licenses.

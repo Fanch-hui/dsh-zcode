@@ -25,10 +25,9 @@ export interface AccountSnapshot {
 export interface RequestCredential {
   token: string
   revision: number
-  kind: 'pat' | 'api-key' | 'start-plan'
-  deviceId?: string
-  /** Host-only identity captured with the PAT owner, separate from public account status. */
-  routing?: { apiKeyId?: string; zcodeToken: string }
+  kind: 'proxy'
+  /** Private loopback endpoint owned by the current account snapshot. */
+  url: string
 }
 export interface QuotaWindow {
   name: string

@@ -38,6 +38,12 @@ test('classifies Start Plan business codes independently of Coding Plan', () => 
 })
 
 test('reads JSON business failures even on HTTP 200 and preserves transient Retry-After', async () => {
+  const interactive = await startPlanResponseFailure(Response.json({ error: {
+    type: 'captcha_solver_failed', message: 'fixture-private-detail',
+  } }, { status: 503 }))
+  assert.equal(interactive?.code, 'ZCODE_VERIFICATION_REQUIRED')
+  assert.match(interactive?.message ?? '', /安全验证/)
+  assert.doesNotMatch(interactive?.message ?? '', /fixture-private-detail/)
   const quota = await startPlanResponseFailure(Response.json({ code: 1005, msg: 'private' }))
   assert.equal(quota?.code, 'QUOTA_EXHAUSTED')
   assert.match(quota?.message ?? '', /1005/)

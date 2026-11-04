@@ -12,14 +12,19 @@ import { ZcodeAuth } from '../src/auth/index.js'
 import { registerAuthorizationFlows } from '../src/cli/authorization.js'
 import { parseArgs, runCli } from '../src/cli/commands.js'
 import { DshCredentialStore } from '../src/storage/credentials.js'
+import type { UpstreamPort } from '../src/proxy/types.js'
 
-const reply = (data: unknown) => Response.json({ code: 0, data })
-
-async function fixture(fetcher: typeof fetch) {
+async function fixture(rpc: (method: string, params?: unknown, signal?: AbortSignal) => Promise<unknown>) {
   const home = await mkdtemp(join(tmpdir(), 'dsh-zcode-cli-test-'))
   const ctx = new Context()
   await ctx.plugin(LocalCredentialProvider, { dshHome: home, watch: false })
-  const auth = new ZcodeAuth({ store: new DshCredentialStore(ctx.credentials), fetch: fetcher })
+  const engine = {
+    apiKey: 'synthetic-local-key',
+    rpc: <T>(method: string, params?: unknown, signal?: AbortSignal) => rpc(method, params, signal) as Promise<T>,
+    start: async () => 'http://127.0.0.1:12345/v1/messages', dispose() {},
+  }
+  const upstream: UpstreamPort = { get: () => engine, release() {}, invalidate() {}, dispose() {} }
+  const auth = new ZcodeAuth({ store: new DshCredentialStore(ctx.credentials), upstream })
   let closed = false
   return {
     ctx, auth, home,
@@ -68,13 +73,11 @@ test('CLI executable starts and exits with an isolated official credential provi
 
 test('DSH authorization flow notifies its caller and confirms the actual credential commit', async () => {
   const now = Date.now()
-  const item = await fixture(async input => {
-    const url = String(input)
-    if (url.endsWith('/oauth/cli/init')) return reply({ authorize_url: 'https://bigmodel.cn/login?flow=fixture',
-      expires_at: Math.floor(now / 1000) + 60, flow_id: 'fixture', poll_interval_sec: 1 })
-    if (url.endsWith('/oauth/cli/poll/fixture')) return reply({ status: 'ready', token: 'synthetic-zcode',
-      user: { user_id: 'fixture-user' }, bigmodel: { access_token: 'synthetic-oauth' } })
-    return new Response('', { status: 503 })
+  const item = await fixture(async method => {
+    if (method === 'beginLogin') return { attemptId: 'fixture', authorizeUrl: 'https://bigmodel.cn/login?flow=fixture', expiresAt: now + 60_000 }
+    if (method === 'completeLogin') return { provider: 'bigmodel', apiKey: 'synthetic-key', jwt: 'synthetic-zcode' }
+    if (method === 'cancelLogin') return null
+    throw new Error('unexpected method')
   })
   try {
     await item.ctx.plugin(AuthorizationService)
@@ -92,10 +95,11 @@ test('DSH authorization flow notifies its caller and confirms the actual credent
 test('CLI login can be cancelled while initialization waits for the network', async () => {
   let initiated!: () => void
   const started = new Promise<void>(resolve => { initiated = resolve })
-  const item = await fixture(async (_input, init) => {
+  const item = await fixture(async (method, _params, signal) => {
+    if (method === 'cancelLogin') return null
     initiated()
-    return await new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
+    return await new Promise<never>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
     })
   })
   try {
@@ -112,7 +116,12 @@ test('CLI login can be cancelled while initialization waits for the network', as
 })
 
 test('CLI status, quota, and disconnect use the same DSH credential record', async () => {
-  const item = await fixture(async () => reply({ limits: [{ type: 'TOKENS_LIMIT', unit: 3, number: 5, remaining: 80, usage: 100 }] }))
+  const item = await fixture(async method => {
+    if (method === 'quota') return { serverTime: Date.now(), balances: [], errors: [],
+      codingPlan: { level: 'fixture', limits: [{ type: 'TOKENS_LIMIT', total: 100, remaining: 80, used: 20 }] } }
+    if (method === 'cancelLogin') return null
+    throw new Error('unexpected method')
+  })
   try {
     await item.auth.useApiKey('bigmodel', 'synthetic-test-key')
     const messages: string[] = []
