@@ -9,7 +9,7 @@ import { ZCodeAdapter } from './provider/adapter.js'
 import { PROVIDERS } from './provider/catalog.js'
 import { ZCodeRuntime } from './runtime.js'
 import { DshCredentialStore } from './storage/credentials.js'
-import { createNetwork } from './transport/http.js'
+import { createNetwork } from './transport/network.js'
 import { registerAuthorizationFlows } from './cli/authorization.js'
 
 export { Config }

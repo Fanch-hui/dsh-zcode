@@ -7,10 +7,10 @@
 开发与验证基线：DSH **0.2.2-rc.1**，同时支持 **0.2.2-alpha.3**，Node **24.9.0 及以上**。桌面版使用应用附带的 Node 运行时。运行兼容范围为 `>=0.2.2-alpha.3 <0.3.0`，开发依赖固定至已验证版本。
 
 ```bash
-dsh plugin --profile web add ./dsh-zcode-0.1.1.tgz
+dsh plugin --profile web add ./dsh-zcode-0.1.2.tgz
 ```
 
-此命令适用于 npm 安装的 DSH。桌面版通过应用的插件管理添加本地 `.tgz`，或使用桌面版自带的 `dsh plugin --profile desktop add ./dsh-zcode-0.1.1.tgz`。
+此命令适用于 npm 安装的 DSH。桌面版通过应用的插件管理添加本地 `.tgz`，或使用桌面版自带的 `dsh plugin --profile desktop add ./dsh-zcode-0.1.2.tgz`。
 
 1. 在 DSH 的「插件 → ZCode」选择智谱 BigModel 或 Z.AI。
 2. 点击「登录」，打开授权链接，在官方页面完成授权。首次登录会查找或创建平台的专用凭据元数据，用于签发短期 PAT。
@@ -58,7 +58,7 @@ Z.AI 使用 `--platform zai`。登录命令打印官方授权地址，按 Ctrl+C
 DSH 默认 headless profile 关闭凭据服务。使用该 profile 时先安装插件：
 
 ```bash
-dsh plugin --profile headless add ./dsh-zcode-0.1.1.tgz
+dsh plugin --profile headless add ./dsh-zcode-0.1.2.tgz
 ```
 
 创建 `zcode-headless.patch.yml` 显式启用凭据服务：
@@ -90,7 +90,7 @@ npm test
 npm pack
 ```
 
-`npm pack` 构建 Host ESM 与浏览器 lazy-CJS factory，并检查包入口、共享 RPC 描述和客户端边界。DSH 与 Cordis 服务由宿主提供。
+`npm pack` 构建 Host ESM、独立 CLI 与浏览器 lazy-CJS factory，并检查包入口、共享 RPC 描述和客户端边界。Host 和浏览器共享模块由 DSH 提供；独立 CLI 随包携带所需的 DSH 凭据服务运行时。
 
 自动化测试使用人工构造的上游响应，覆盖 OAuth/PAT、账号隔离、流式协议、工具往返、额度、并发、取消和 RPC；构建与包入口在 macOS arm64、Node 24.14.0 验证。真实套餐调用、两平台计费扣减、Windows 安装和界面操作由实际环境验收。
 

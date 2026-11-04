@@ -7,7 +7,8 @@ const manifest = JSON.parse(await readFile(new URL('package.json', root), 'utf8'
 const targets = Object.values(manifest.exports).flatMap(entry => typeof entry === 'string' ? [entry] : Object.values(entry))
 targets.push(...Object.values(manifest.bin ?? {}))
 await Promise.all(targets.map(target => access(new URL(target, root))))
-await Promise.all(['cordis.patch.yml', 'LICENSE', 'README.md', 'THIRD_PARTY_NOTICES.md'].map(path => access(new URL(path, root))))
+await Promise.all(['cordis.patch.yml', 'LICENSE', 'README.md', 'THIRD_PARTY_NOTICES.md',
+  'lib/cli/THIRD_PARTY_LICENSES.txt'].map(path => access(new URL(path, root))))
 const host = await import(new URL(manifest.main, root))
 assert.equal(typeof host.apply, 'function')
 assert.equal(host.name, 'llm-zcode')

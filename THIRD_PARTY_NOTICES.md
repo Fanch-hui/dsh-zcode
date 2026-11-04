@@ -17,7 +17,7 @@ The plugin implements these public request and response contracts in its own mod
 - Repository: https://github.com/deepseek-ai/deepseek-harness
 - Reference release: `dsh-v0.2.2-rc.1` (`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`)
 - Compatibility baseline: `dsh-v0.2.2-alpha.3` (`05b1cae8db6e674c5685101494d4eec24652424a`)
-- License: MIT. DSH and Cordis packages are peer dependencies supplied by the host.
+- License: MIT. Host and browser DSH/Cordis packages are peer dependencies supplied by the host. The standalone CLI bundles its required service runtime; bundled package licenses accompany the CLI artifact.
 - Contract references: `LlmAdapter`, `StreamChunk`, replay envelopes, credentials, volatile Config, Typert RPC, and browser lazy-CJS plugin factories.
 - The browser build follows DSH's documented factory format and links the host's React, Zod and UI primitives.
 

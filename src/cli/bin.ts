@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { LocalCredentialProvider } from '@deepseek-ai/dsh-credentials-local'
 import { ZcodeAuth } from '../auth/index.js'
 import { DshCredentialStore } from '../storage/credentials.js'
-import { createNetwork } from '../transport/http.js'
+import { createNetwork } from '../transport/network.js'
 import { runCli, type CliEnvironment } from './commands.js'
 
 async function open(home?: string): Promise<CliEnvironment> {
