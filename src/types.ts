@@ -19,7 +19,13 @@ export interface AccountSnapshot {
   mode: AuthMode
   signal: AbortSignal
 }
-export interface RequestCredential { token: string; revision: number; kind: 'pat' | 'api-key' }
+export interface RequestCredential {
+  token: string
+  revision: number
+  kind: 'pat' | 'api-key'
+  /** Host-only identity captured with the PAT owner, separate from public account status. */
+  routing?: { apiKeyId?: string; zcodeToken: string }
+}
 export interface QuotaWindow {
   name: string
   usedPercent?: number

@@ -7,10 +7,10 @@
 开发与验证基线：DSH **0.2.2-rc.1**，同时支持 **0.2.2-alpha.3**，Node **24.9.0 及以上**。桌面版使用应用附带的 Node 运行时。运行兼容范围为 `>=0.2.2-alpha.3 <0.3.0`，开发依赖固定至已验证版本。
 
 ```bash
-dsh plugin --profile web add ./dsh-zcode-0.1.2.tgz
+dsh plugin --profile web add ./dsh-zcode-0.1.3.tgz
 ```
 
-此命令适用于 npm 安装的 DSH。桌面版通过应用的插件管理添加本地 `.tgz`，或使用桌面版自带的 `dsh plugin --profile desktop add ./dsh-zcode-0.1.2.tgz`。
+此命令适用于 npm 安装的 DSH。桌面版通过应用的插件管理添加本地 `.tgz`，或使用桌面版自带的 `dsh plugin --profile desktop add ./dsh-zcode-0.1.3.tgz`。
 
 1. 在 DSH 的「插件 → ZCode」选择智谱 BigModel 或 Z.AI。
 2. 点击「登录」，打开授权链接，在官方页面完成授权。首次登录会查找或创建平台的专用凭据元数据，用于签发短期 PAT。
@@ -34,9 +34,9 @@ Token 统计采用 DSH 口径：未缓存输入、缓存读取、缓存写入分
 
 ## 请求与凭据
 
-OAuth/PAT 请求使用官方 ZCode 的静态 Coding Plan 网关；手工 Key 请求使用对应平台的 Anthropic Coding Plan 端点。每次模型流只执行一个 HTTP attempt；安装 DSH 的 `dsh-llm-retry` 时，统一执行最多一次瞬时故障重试。已开始输出的流中断会保留会话中的内容，并提示继续。
+OAuth/PAT 请求按官方动态配置选择直连或 Coding Plan 网关，路由快照按账号隔离并缓存 5 分钟；配置刷新失败保留已有快照，首次刷新失败使用平台标准端点。目标限于 ZCode、BigModel 与 Z.AI 的官方 HTTPS origin，网关身份头按受信路由标记发送。手工 Key 请求使用对应平台的 Anthropic Coding Plan 端点。每次模型流只执行一个 HTTP attempt；安装 DSH 的 `dsh-llm-retry` 时，统一执行最多一次瞬时故障重试。已开始输出的流中断会保留会话中的内容，并提示继续。
 
-同一账号的模型请求按会话公平排队。429 的冷却作用于该账号的新请求。队列、凭据等待和网络读取接受取消；断开账号或禁用插件时中止关联工作。切换凭据后，旧回合继续绑定旧账号并停止，下一回合使用新凭据。
+同一账号的模型请求按会话公平排队。HTTP 429 按平台业务码区分临时限流、服务繁忙、额度与套餐权限，并显示平台码；只有临时故障进入 DSH 重试，额度与权限问题直接提示对应处理。临时限流的冷却作用于该账号的新请求。队列、凭据等待和网络读取接受取消；断开账号或禁用插件时中止关联工作。切换凭据后，旧回合继续绑定旧账号并停止，下一回合使用新凭据。
 
 凭据存入 DSH credentials 服务的 `llm-zcode` 域，手工 Key 使用独立记录。短期 PAT 与 Z.AI 业务票据仅保存在 Host 内存。RPC 状态、模型目录和会话回放保存公开元数据。DSH 默认本地凭据后端为用户目录中的文件，POSIX 权限为 0600，Windows 访问权限随用户目录 ACL。
 
@@ -58,7 +58,7 @@ Z.AI 使用 `--platform zai`。登录命令打印官方授权地址，按 Ctrl+C
 DSH 默认 headless profile 关闭凭据服务。使用该 profile 时先安装插件：
 
 ```bash
-dsh plugin --profile headless add ./dsh-zcode-0.1.2.tgz
+dsh plugin --profile headless add ./dsh-zcode-0.1.3.tgz
 ```
 
 创建 `zcode-headless.patch.yml` 显式启用凭据服务：

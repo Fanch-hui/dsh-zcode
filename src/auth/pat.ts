@@ -73,7 +73,10 @@ export class PatManager {
       }
       const expiresAt = Math.min(expiry * 1000, startedAt + expiresIn * 1000)
       if (expiresAt <= this.deps.now()) throw new AuthError('ZCODE_INVALID_RESPONSE')
-      const credential: RequestCredential = { token, kind: 'pat', revision: ++this.revision }
+      const credential: RequestCredential = {
+        token, kind: 'pat', revision: ++this.revision,
+        routing: { apiKeyId: this.location?.apiKeyId, zcodeToken: this.deps.grant.payload.zcodeToken },
+      }
       const jitter = Math.max(0, Math.min(1, this.deps.random())) * 60_000
       this.current = { credential, expiresAt, refreshAt: expiresAt - 120_000 - jitter }
       return credential

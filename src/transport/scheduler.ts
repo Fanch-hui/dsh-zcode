@@ -14,7 +14,7 @@ interface AccountQueue {
   timer?: ReturnType<typeof setTimeout>
 }
 
-/** A round-robin queue per account; a slot covers only a model HTTP attempt. */
+/** A round-robin queue per account; each admitted model attempt holds one slot. */
 export class RequestScheduler {
   private readonly accounts = new Map<string, AccountQueue>()
   private disposed = false

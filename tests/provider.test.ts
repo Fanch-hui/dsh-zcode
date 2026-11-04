@@ -13,8 +13,8 @@ import type { Platform } from '../src/types.js'
 const defaults: Settings = { platform: 'bigmodel', concurrency: 2, maxTokens: 32000, timeoutMs: 10000, effort: 'high' }
 const options: GenerateOptions = { provider: 'zcode-bigmodel', model: 'GLM-5.3', messages: [{ role: 'user', content: [{ type: 'text', text: 'read file' }] }] }
 
-function memory(initial?: StoredAccount): CredentialStore {
-  const records = new Map<Platform, StoredAccount>(initial ? [['bigmodel', initial]] : [])
+function memory(initial?: StoredAccount, platform: Platform = 'bigmodel'): CredentialStore {
+  const records = new Map<Platform, StoredAccount>(initial ? [[platform, initial]] : [])
   return {
     async load(platform) { return records.get(platform) },
     async save(platform, value, check) { check(); records.set(platform, value) },
@@ -84,8 +84,18 @@ test('a PAT rejection consumes one attempt and the next DSH retry obtains a new 
   } }) })
   let requests = 0
   const adapter = new ZCodeAdapter({ auth, settings: () => defaults, fetch: async (url, init) => {
+    if (String(url) === 'https://zcode.z.ai/api/v1/agent/configs') {
+      assert.equal(new Headers(init?.headers).get('x-api-key-id'), 'metadata-id')
+      assert.equal(new Headers(init?.headers).has('authorization'), false)
+      return Response.json({ code: 0, data: { proxyEndpoint: { mapping: [{
+        from: 'https://open.bigmodel.cn/api/anthropic/v1/messages',
+        to: 'https://zcode.z.ai/api/v1/ultra/anthropic/v1/messages',
+        zcodeAuthorizationHeader: 'X-ZCode-Authorization',
+      }] } } })
+    }
     assert.equal(String(url), 'https://zcode.z.ai/api/v1/ultra/anthropic/v1/messages')
     assert.equal(new Headers(init?.headers).get('x-api-key'), `fixture-pat-${requests + 1}`)
+    assert.equal(new Headers(init?.headers).get('x-zcode-authorization'), 'Bearer fixture-zcode')
     return ++requests === 1 ? new Response('', { status: 401 }) : answer({ type: 'text', text: 'ok' })
   } })
   const controller = new AbortController()
@@ -97,6 +107,37 @@ test('a PAT rejection consumes one attempt and the next DSH retry obtains a new 
   assert.equal(requests, 2)
   assert.equal(adapter.providerRetryPolicy().mode, 'normal')
   adapter.dispose(); auth.dispose()
+})
+
+test('Z.AI OAuth quota failures mark account state and block further model attempts', async () => {
+  const record: StoredAccount = { kind: 'grant', payload: {
+    schemaVersion: 1, platform: 'zai', scope: 'fixture-zai-scope', oauthAccessToken: 'fixture-oauth', zcodeToken: 'fixture-zcode',
+    location: { organizationId: 'org', projectId: 'project', apiKeyId: 'metadata-id' },
+  } }
+  const auth = new ZcodeAuth({ store: memory(record, 'zai'), fetch: async () => Response.json({ code: 0, data: {
+    accessToken: 'fixture-zai-pat', tokenType: 'Bearer', expiresIn: 600, expiresAt: Date.now() / 1000 + 600,
+  } }) })
+  let requests = 0
+  const adapter = new ZCodeAdapter({ auth, settings: () => ({ ...defaults, platform: 'zai' }), fetch: async (url, init) => {
+    if (String(url) === 'https://zcode.z.ai/api/v1/agent/configs') {
+      return Response.json({ code: 0, data: { proxyEndpoint: { mapping: [] } } })
+    }
+    requests++
+    assert.equal(String(url), 'https://api.z.ai/api/anthropic/v1/messages')
+    assert.equal(new Headers(init?.headers).get('x-api-key'), 'fixture-zai-pat')
+    return Response.json({ error: { code: '1308', message: 'fixture quota limit' } }, { status: 429 })
+  } })
+  const zaiOptions = { ...options, provider: 'zcode-zai' }
+  try {
+    await assert.rejects(collect(adapter.stream(zaiOptions)), (error: unknown) =>
+      error instanceof LlmError && error.code === 'QUOTA_EXHAUSTED' && /1308/.test(error.message))
+    assert.equal((await auth.status('zai')).state, 'quota_exhausted')
+    await assert.rejects(adapter.prepareCall('zcode-zai', 'GLM-5.3'), (error: unknown) =>
+      error instanceof LlmError && error.code === 'QUOTA_EXHAUSTED')
+    assert.equal(requests, 1)
+    const policy = adapter.providerRetryPolicy()
+    assert.equal(policy.mode === 'normal' && policy.retryableCodes.includes('QUOTA_EXHAUSTED'), false)
+  } finally { adapter.dispose(); auth.dispose() }
 })
 
 test('prepared requests freeze settings and never switch to a newly selected account', async () => {

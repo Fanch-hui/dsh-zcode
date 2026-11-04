@@ -7,7 +7,7 @@ import type { Settings } from '../config.js'
 import type { AccountSnapshot, AuthPort } from '../types.js'
 import { buildRequest, parseStream, type ResolveImage } from '../protocol/index.js'
 import { RequestScheduler } from '../transport/scheduler.js'
-import { modelEndpoint } from '../transport/routes.js'
+import { EndpointRouter } from '../transport/routing.js'
 import { httpFailure, retryAfter } from '../transport/http.js'
 import { MODELS, platformFor, resolveModel } from './catalog.js'
 import { upstreamSession } from './session.js'
@@ -20,16 +20,19 @@ export interface AdapterDependencies {
   image?: ResolveImage
   sessionScope?: string
   scheduler?: RequestScheduler
+  routingWarning?: (reason: string) => void
 }
 
 export class ZCodeAdapter extends LlmAdapter {
   private readonly shutdown = new AbortController()
   private readonly series = new WeakMap<AbortSignal, Map<string, AccountSnapshot>>()
   private readonly scheduler: RequestScheduler
+  private readonly router: EndpointRouter
 
   constructor(private readonly dependencies: AdapterDependencies) {
     super()
     this.scheduler = dependencies.scheduler ?? new RequestScheduler()
+    this.router = new EndpointRouter({ fetch: dependencies.fetch, onWarning: dependencies.routingWarning })
   }
 
   override providerInfo(provider: string) {
@@ -68,6 +71,7 @@ export class ZCodeAdapter extends LlmAdapter {
 
   dispose(): void {
     this.shutdown.abort(new LlmError('ZCode 插件已停止。', 'ABORTED'))
+    this.router.dispose()
     this.scheduler.dispose()
   }
 
@@ -117,25 +121,29 @@ export class ZCodeAdapter extends LlmAdapter {
       const accountKey = `${account.platform}:${account.scope}`
       release = await this.scheduler.acquire(accountKey, options.sessionId ?? session, settings.concurrency, signal)
       const credential = await this.dependencies.auth.credential(account, signal)
+      const route = await this.router.resolve(account, credential, signal)
       signal.throwIfAborted()
       if ((await this.dependencies.auth.status(account.platform)).state === 'quota_exhausted') {
         throw new LlmError('套餐额度已用尽，请刷新用量查看重置时间。', 'QUOTA_EXHAUSTED')
       }
       signal.throwIfAborted()
-      const response = await (this.dependencies.fetch ?? fetch)(modelEndpoint(account), {
+      const response = await (this.dependencies.fetch ?? fetch)(route.url, {
         method: 'POST', redirect: 'error', signal, body: JSON.stringify(body),
         headers: {
           ...attributionHeaders(), 'content-type': 'application/json', accept: 'text/event-stream',
           'anthropic-version': '2023-06-01', 'x-api-key': credential.token,
           authorization: `Bearer ${credential.token}`,
           'x-session-id': session, 'x-request-id': randomUUID(),
+          ...route.headers,
         },
       })
       if (!response.ok) {
         const delay = retryAfter(response)
-        if (response.status === 429) this.scheduler.cooldown(accountKey, delay ?? 1000)
-        await response.body?.cancel()
-        throw httpFailure(response, account, credential, this.dependencies.auth, delay)
+        const failure = await httpFailure(response, account, credential, this.dependencies.auth, delay)
+        if (response.status === 429 && (failure.code === 'RATE_LIMIT' || failure.code === 'SERVER')) {
+          this.scheduler.cooldown(accountKey, delay ?? 1000)
+        }
+        throw failure
       }
       if (!response.body) throw new LlmError('平台返回空响应。', 'TRANSPORT')
       for await (let chunk of parseStream(response.body, context, signal)) {

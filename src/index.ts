@@ -27,6 +27,7 @@ export function apply(ctx: Context, config: Config): void {
   runtime = new ZCodeRuntime(auth, settings, provider => ctx.emit('llm/models-updated', provider))
   const adapter = new ZCodeAdapter({
     auth, settings, fetch: network.fetch, sessionScope: ctx.profileContext.dir,
+    routingWarning: reason => ctx.logger.warn(`ZCode 路由配置刷新失败：${reason}。`),
     image: async (block, signal) => {
       const image = await ctx.attachments.readImage(block.attachment, signal)
       return `data:${image.ref.mediaType};base64,${Buffer.from(image.data).toString('base64')}`
