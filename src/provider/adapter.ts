@@ -4,12 +4,13 @@ import {
   type GenerateOptions, type StreamChunk, type PreparedAdapterCall,
 } from '@deepseek-ai/dsh-llm'
 import type { Settings } from '../config.js'
-import type { AccountSnapshot, AuthPort } from '../types.js'
+import type { AccountSnapshot, AuthPort, RequestCredential } from '../types.js'
 import { buildRequest, parseStream, type ResolveImage } from '../protocol/index.js'
 import { RequestScheduler } from '../transport/scheduler.js'
 import { EndpointRouter } from '../transport/routing.js'
 import { httpFailure, retryAfter } from '../transport/http.js'
-import { MODELS, platformFor, resolveModel } from './catalog.js'
+import { MODELS, platformFor, planFor, providerName, resolveModel } from './catalog.js'
+import { startPlanResponseFailure } from '../transport/start-plan.js'
 import { upstreamSession } from './session.js'
 import { providerFailure } from './errors.js'
 
@@ -36,13 +37,15 @@ export class ZCodeAdapter extends LlmAdapter {
   }
 
   override providerInfo(provider: string) {
-    return { id: provider, name: platformFor(provider) === 'bigmodel' ? 'ZCode · 智谱' : 'ZCode · Z.AI' }
+    return { id: provider, name: providerName(provider) }
   }
 
-  override providerRetryPolicy() {
+  override providerRetryPolicy(provider = 'zcode-bigmodel') {
     return resolveRetryPolicy({
       mode: 'normal', maxRetries: 1,
-      retryableCodes: ['ZCODE_PAT_REJECTED', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
+      retryableCodes: planFor(provider) === 'start-plan'
+        ? ['SERVER', 'TIMEOUT', 'TRANSPORT']
+        : ['ZCODE_PAT_REJECTED', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
     }, 'dsh-zcode.retryPolicy')
   }
 
@@ -82,8 +85,9 @@ export class ZCodeAdapter extends LlmAdapter {
     let account: AccountSnapshot
     try {
       const platform = platformFor(provider)
-      account = await this.dependencies.auth.snapshot(platform, signal)
-      if ((await this.dependencies.auth.status(platform)).state === 'quota_exhausted') {
+      const plan = planFor(provider)
+      account = await this.dependencies.auth.snapshot(platform, signal, plan)
+      if ((await this.dependencies.auth.status(platform, plan)).state === 'quota_exhausted') {
         throw new LlmError('套餐额度已用尽，请刷新用量查看重置时间。', 'QUOTA_EXHAUSTED')
       }
     } catch (error) { throw providerFailure(error) }
@@ -109,34 +113,39 @@ export class ZCodeAdapter extends LlmAdapter {
     try {
       signal.throwIfAborted()
       const model = resolveModel(options.provider, options.model, settings)
-      if (platformFor(options.provider) !== account.platform) throw new LlmError('账号与模型平台不一致。', 'AUTH')
+      if (platformFor(options.provider) !== account.platform || planFor(options.provider) !== (account.plan ?? 'coding-plan')) {
+        throw new LlmError('账号或套餐与所选模型不一致。', 'AUTH')
+      }
       const context = {
         provider: options.provider, model: options.model, scope: account.scope,
+        plan: account.plan,
         defaultMaxTokens: settings.maxTokens, defaultEffort: settings.effort,
       }
       const messages = model.inputModalities?.includes('image')
         ? options.messages : [...projectImagesForTextModel(options.messages)]
       const body = await buildRequest({ ...options, messages, signal }, context, this.dependencies.image)
       const session = upstreamSession(this.dependencies.sessionScope ?? 'dsh', account, options)
-      const accountKey = `${account.platform}:${account.scope}`
+      const accountKey = `${account.platform}:${account.scope}:${account.plan ?? 'coding-plan'}`
       release = await this.scheduler.acquire(accountKey, options.sessionId ?? session, settings.concurrency, signal)
       const credential = await this.dependencies.auth.credential(account, signal)
       const route = await this.router.resolve(account, credential, signal)
       signal.throwIfAborted()
-      if ((await this.dependencies.auth.status(account.platform)).state === 'quota_exhausted') {
+      if ((await this.dependencies.auth.status(account.platform, account.plan)).state === 'quota_exhausted') {
         throw new LlmError('套餐额度已用尽，请刷新用量查看重置时间。', 'QUOTA_EXHAUSTED')
       }
       signal.throwIfAborted()
       const response = await (this.dependencies.fetch ?? fetch)(route.url, {
         method: 'POST', redirect: 'error', signal, body: JSON.stringify(body),
-        headers: {
-          ...attributionHeaders(), 'content-type': 'application/json', accept: 'text/event-stream',
-          'anthropic-version': '2023-06-01', 'x-api-key': credential.token,
-          authorization: `Bearer ${credential.token}`,
-          'x-session-id': session, 'x-request-id': randomUUID(),
-          ...route.headers,
-        },
+        headers: { ...requestHeaders(credential, session), ...route.headers },
       })
+      if (account.plan === 'start-plan') {
+        const failure = await startPlanResponseFailure(response)
+        if (failure) {
+          if (failure.code === 'AUTH') this.dependencies.auth.markState(account, 'reauth_required', failure.code)
+          if (failure.code === 'RATE_LIMIT') this.scheduler.cooldown(accountKey, retryAfter(response) ?? 1000)
+          throw failure
+        }
+      }
       if (!response.ok) {
         const delay = retryAfter(response)
         const failure = await httpFailure(response, account, credential, this.dependencies.auth, delay)
@@ -150,7 +159,10 @@ export class ZCodeAdapter extends LlmAdapter {
         signal.throwIfAborted()
         if (chunk.type === 'finish' && chunk.reason.kind === 'error') {
           const code = chunk.reason.failure.code
-          if (code === 'QUOTA_EXHAUSTED') this.dependencies.auth.markState(account, 'quota_exhausted', code)
+          if (code === 'QUOTA_EXHAUSTED' && account.plan !== 'start-plan') {
+            this.dependencies.auth.markState(account, 'quota_exhausted', code)
+          }
+          if (code === 'AUTH' && account.plan === 'start-plan') this.dependencies.auth.markState(account, 'reauth_required', code)
           if (committed) chunk = { type: 'finish', reason: { kind: 'error', failure: {
             code: 'ZCODE_STREAM_INTERRUPTED', message: '模型输出中断，请从当前会话继续。',
           } } }
@@ -171,6 +183,21 @@ export class ZCodeAdapter extends LlmAdapter {
       release?.()
     }
   }
+}
+
+function requestHeaders(credential: RequestCredential, session: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    ...attributionHeaders(), 'content-type': 'application/json', accept: 'text/event-stream',
+    'anthropic-version': '2023-06-01', 'x-api-key': credential.token,
+    authorization: `Bearer ${credential.token}`, 'x-session-id': session, 'x-request-id': randomUUID(),
+  }
+  if (credential.kind === 'start-plan') {
+    if (!credential.deviceId) throw new LlmError('Start Plan 设备身份尚未准备好，请重启插件。', 'TRANSPORT')
+    headers['X-Device-Mid'] = credential.deviceId
+    headers['x-zcode-session-type'] = 'other'
+    headers['x-zcode-trace-id'] = randomUUID()
+  }
+  return headers
 }
 
 function isModelContent(chunk: StreamChunk): boolean {

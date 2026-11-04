@@ -1,9 +1,10 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import type { AccountSnapshot, AccountState, AccountStatus, AuthPort, LoginAttempt, Platform, QuotaSnapshot, RequestCredential } from '../types.js'
+import type { AccountSnapshot, AccountState, AccountStatus, AuthPort, LoginAttempt, Plan, Platform, QuotaSnapshot, RequestCredential } from '../types.js'
 import { AuthError, waitFor, type Fetcher } from './http.js'
 import { initOAuth, pollOAuth, type OAuthInit } from './oauth.js'
 import { PatManager } from './pat.js'
 import { fetchQuota } from './quota.js'
+import { StartPlanQuotaCache } from './start-plan.js'
 import { LoginCompletion } from './completion.js'
 import { readAccount, scopeOf, type CredentialStore, type KeyLocation, type StoredAccount, type StoredGrant } from './types.js'
 
@@ -44,6 +45,7 @@ export interface AuthOptions {
   fetch?: Fetcher
   now?: () => number
   random?: () => number
+  deviceId?: () => Promise<string>
   onChange?: (status: AccountStatus) => void
 }
 
@@ -60,12 +62,17 @@ export class ZcodeAuth implements AuthPort {
   private readonly fetcher: Fetcher
   private readonly now: () => number
   private readonly random: () => number
+  private readonly deviceId: () => Promise<string>
+  private readonly startPlanQuota: StartPlanQuotaCache
   private disposed = false
 
   constructor(private readonly options: AuthOptions) {
     this.fetcher = options.fetch ?? fetch
     this.now = options.now ?? Date.now
     this.random = options.random ?? Math.random
+    const runtimeDeviceId = randomUUID()
+    this.deviceId = options.deviceId ?? (() => Promise.resolve(runtimeDeviceId))
+    this.startPlanQuota = new StartPlanQuotaCache(this.fetcher, this.now)
   }
 
   private async ensure(platform: Platform): Promise<Slot> {
@@ -199,10 +206,21 @@ export class ZcodeAuth implements AuthPort {
     })
   }
 
-  async status(platform: Platform): Promise<AccountStatus> {
+  async status(platform: Platform, plan?: Plan): Promise<AccountStatus> {
     const slot = await this.ensure(platform)
     await this.reconcile(platform)
-    return this.publicStatus(slot)
+    const status = this.publicStatus(slot)
+    if (plan !== 'start-plan') return status
+    status.plan = plan
+    if (slot.record?.kind === 'grant' && status.state === 'quota_exhausted') {
+      status.state = 'ready'
+      delete status.errorCode
+    }
+    if (slot.record?.kind === 'api-key' && ['ready', 'quota_exhausted', 'reauth_required'].includes(status.state)) {
+      status.state = 'reauth_required'
+      status.errorCode = 'ZCODE_START_LOGIN_REQUIRED'
+    }
+    return status
   }
 
   async beginLogin(platform: Platform, signal?: AbortSignal): Promise<AccountStatus> {
@@ -380,15 +398,17 @@ export class ZcodeAuth implements AuthPort {
     }
   }
 
-  async snapshot(platform: Platform, signal?: AbortSignal): Promise<AccountSnapshot> {
+  async snapshot(platform: Platform, signal?: AbortSignal, plan?: Plan): Promise<AccountSnapshot> {
     signal?.throwIfAborted()
     const slot = await this.ensure(platform)
     await waitFor(this.reconcile(platform), signal)
     signal?.throwIfAborted()
     const record = slot.record
     if (!record || slot.state === 'reauth_required' || slot.revoked === identityOf(record)) throw new AuthError('ZCODE_LOGIN_REQUIRED')
+    if (plan === 'start-plan' && record.kind !== 'grant') throw new AuthError('ZCODE_START_LOGIN_REQUIRED')
     return { platform, scope: scopeOf(record), generation: slot.generation,
-      mode: record.kind === 'grant' ? 'oauth' : 'api-key', signal: slot.controller.signal }
+      mode: record.kind === 'grant' ? 'oauth' : 'api-key', signal: slot.controller.signal,
+      ...(plan === 'start-plan' ? { plan } : {}) }
   }
 
   async credential(snapshot: AccountSnapshot, signal?: AbortSignal): Promise<RequestCredential> {
@@ -397,6 +417,18 @@ export class ZcodeAuth implements AuthPort {
     this.assertSnapshot(slot, snapshot)
     signal?.throwIfAborted()
     const record = slot.record!
+    if (snapshot.plan === 'start-plan') {
+      if (record.kind !== 'grant') throw new AuthError('ZCODE_START_LOGIN_REQUIRED')
+      const combined = signal ? AbortSignal.any([snapshot.signal, signal]) : snapshot.signal
+      const deviceId = (await waitFor(this.deviceId(), combined)).trim()
+      if (!deviceId || !/^[\x20-\x7e]+$/.test(deviceId)) throw new AuthError('ZCODE_DEVICE_ID_UNAVAILABLE')
+      await waitFor(this.reconcile(snapshot.platform), combined)
+      this.assertSnapshot(slot, snapshot)
+      combined.throwIfAborted()
+      const current = slot.record!
+      if (current.kind !== 'grant') throw new AuthError('ZCODE_START_LOGIN_REQUIRED')
+      return { token: current.payload.zcodeToken, kind: 'start-plan', revision: slot.generation, deviceId }
+    }
     if (record.kind === 'api-key') return { token: record.key, kind: 'api-key', revision: slot.generation }
     if (!slot.pat) slot.pat = new PatManager({
       platform: slot.platform, grant: record, fetch: this.fetcher, now: this.now, random: this.random,
@@ -443,13 +475,28 @@ export class ZcodeAuth implements AuthPort {
     if (!slot) return
     try { this.assertSnapshot(slot, snapshot) } catch { return }
     if (credential.kind === 'pat') slot.pat?.invalidate(credential)
-    else if (credential.revision === slot.generation) this.markState(snapshot, 'reauth_required', 'ZCODE_API_KEY_REJECTED')
+    else if (credential.revision === slot.generation) this.markState(snapshot, 'reauth_required',
+      credential.kind === 'start-plan' ? 'ZCODE_LOGIN_REQUIRED' : 'ZCODE_API_KEY_REJECTED')
   }
 
   async queryQuota(snapshot: AccountSnapshot, signal?: AbortSignal, force = false): Promise<QuotaSnapshot> {
     const slot = await this.ensure(snapshot.platform)
     await waitFor(this.reconcile(snapshot.platform), signal)
     this.assertSnapshot(slot, snapshot)
+    if (snapshot.plan === 'start-plan') {
+      try {
+        const quota = await this.startPlanQuota.query(snapshot, () => this.credential(snapshot), async () => {
+          await this.reconcile(snapshot.platform)
+          this.assertSnapshot(slot, snapshot)
+        }, signal, force)
+        await waitFor(this.reconcile(snapshot.platform), signal)
+        this.assertSnapshot(slot, snapshot)
+        return quota
+      } catch (error) {
+        if (error instanceof AuthError && error.status === 401) this.markState(snapshot, 'reauth_required', 'ZCODE_LOGIN_REQUIRED')
+        throw error
+      }
+    }
     if (!force && slot.quota && this.now() - slot.quota.updatedAt < 60_000) return slot.quota
     if (!slot.quotaPending) {
       const request = (async () => {
@@ -483,6 +530,7 @@ export class ZcodeAuth implements AuthPort {
     const slot = this.slots.get(snapshot.platform)
     if (!slot) return
     try { this.assertSnapshot(slot, snapshot) } catch { return }
+    if (snapshot.plan === 'start-plan' && state === 'quota_exhausted') return
     slot.state = state
     slot.errorCode = errorCode
     this.changed(slot)
@@ -490,6 +538,7 @@ export class ZcodeAuth implements AuthPort {
 
   dispose(): void {
     this.disposed = true
+    this.startPlanQuota.dispose()
     for (const slot of this.slots.values()) {
       const attempt = slot.attempt
       attempt?.cleanup?.()

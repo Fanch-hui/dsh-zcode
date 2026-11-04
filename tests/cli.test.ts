@@ -33,6 +33,10 @@ test('CLI validates actions before opening the credential service', async () => 
   assert.deepEqual(parseArgs(['quota', '--platform', 'zai', '--home', '/synthetic/dsh']), {
     action: 'quota', platform: 'zai', home: '/synthetic/dsh',
   })
+  assert.deepEqual(parseArgs(['quota', '--platform', 'zai', '--plan', 'start-plan']), {
+    action: 'quota', platform: 'zai', plan: 'start-plan',
+  })
+  assert.throws(() => parseArgs(['status', '--plan', 'unknown']), /ZCODE_CLI_USAGE/)
   let opened = false
   const errors: string[] = []
   const code = await runCli(['login', '--platform', 'unknown'], { out() {}, error: value => errors.push(value) },

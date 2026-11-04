@@ -10,6 +10,7 @@ DSH ZCode is licensed under Apache-2.0. Its source is an independently written D
 - Protocol references: CLI OAuth initialization/polling, personal Coding Plan key metadata, Project Access Tokens, Z.AI business login, quota response fields, official gateway routing, model option maps, and `config/provider/zcode-builtin.json` revision 43.
 - Sources: `apps/zcode-cli/packages/adapters/src/auth/cli-oauth.ts`, `docs/model-provider-project-access-token.md`, `apps/zcode-cli/packages/adapters/src/model/official-coding-plan-gateway.ts`, and the provider catalog.
 - Dynamic routing contract: `apps/zcode-cli/docs/design/v2/model/provider-endpoint-routing.md`.
+- Start Plan contracts: `docs/zai-start-plan-provider.md`, `docs/start-plan-provider-business-errors.md`, and `docs/zcode-endpoint-device-mid-header.md`.
 
 The plugin implements these public request and response contracts in its own modules. It uses the public request-security edition, whose implementation is a transport pass-through.
 

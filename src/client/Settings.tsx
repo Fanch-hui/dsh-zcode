@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { AccountStatus, Platform, QuotaSnapshot } from '../types.js'
+import type { AccountStatus, Plan, Platform, QuotaSnapshot } from '../types.js'
+import { providerFor } from '../provider/identity.js'
 import type { ZCodeController } from './controller.js'
 
 const secondary = 'var(--dsw-alias-text-secondary)'
@@ -13,43 +14,53 @@ const control: CSSProperties = { color: 'inherit', background: 'var(--dsw-alias-
 export function Settings({ controller }: { controller: ZCodeController }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot)
   const [platform, setPlatform] = useState<Platform>()
+  const [plan, setPlan] = useState<Plan>()
   const initialized = useRef(new Map<string, { models: boolean; quota: boolean }>())
   const selected = platform ?? state.status?.settings.platform ?? 'bigmodel'
-  const account = state.status?.accounts.find(item => item.platform === selected)
-  const quota = state.status?.quotas.find(item => item.platform === selected)
-  const models = state.status?.models.filter(item => item.provider === `zcode-${selected}`) ?? []
+  const selectedPlan = plan ?? state.status?.settings.plan ?? 'coding-plan'
+  const account = state.status?.accounts.find(item => item.platform === selected && (item.plan ?? 'coding-plan') === selectedPlan)
+  const quota = state.status?.quotas.find(item => item.platform === selected && (item.plan ?? 'coding-plan') === selectedPlan)
+  const models = state.status?.models.filter(item => item.provider === providerFor(selected, selectedPlan)) ?? []
   const connected = account?.state === 'ready' || account?.state === 'quota_exhausted'
   useEffect(() => controller.watch(), [controller])
   useEffect(() => {
     if (account?.state !== 'ready' || state.pending || controller.getSnapshot().pending) return
-    const key = `${selected}:${account.generation}`
+    const key = `${selected}:${selectedPlan}:${account.generation}`
     const progress = initialized.current.get(key) ?? { models: false, quota: false }
     initialized.current.set(key, progress)
     if (!progress.models) {
       progress.models = true
-      void controller.run('refreshModels', selected)
+      void controller.run('refreshModels', selected, selectedPlan)
     } else if (!progress.quota) {
       progress.quota = true
-      void controller.run('readQuota', selected)
+      void controller.run('readQuota', selected, selectedPlan)
     }
-  }, [controller, selected, account?.state, account?.generation, state.pending])
+  }, [controller, selected, selectedPlan, account?.state, account?.generation, state.pending])
   if (!state.status) return <div role="status">{state.error ?? '正在读取连接状态…'} {state.error && <Button size="sm" onClick={() => { void controller.refresh() }}>重试</Button>}</div>
   const busy = Boolean(state.pending)
   return <div aria-label="ZCode 连接设置" aria-busy={busy} style={{ color: 'var(--dsw-alias-text-primary)', maxWidth: 720, minWidth: 0, width: '100%', fontSize: 14, lineHeight: 1.5 }}>
     {state.error && <p role="alert">{state.error}</p>}
-    <label style={{ ...row, marginBottom: 20 }}>
-      <span>平台</span>
-      <select value={selected} style={control} disabled={busy} onChange={event => setPlatform(event.target.value === 'zai' ? 'zai' : 'bigmodel')}>
-        <option value="bigmodel">智谱 BigModel</option><option value="zai">Z.AI</option>
-      </select>
-    </label>
+    <div style={{ ...row, gap: 20, marginBottom: 20 }}>
+      <label style={row}>
+        <span>平台</span>
+        <select value={selected} style={control} disabled={busy} onChange={event => setPlatform(event.target.value === 'zai' ? 'zai' : 'bigmodel')}>
+          <option value="bigmodel">智谱 BigModel</option><option value="zai">Z.AI</option>
+        </select>
+      </label>
+      <label style={row}>
+        <span>套餐</span>
+        <select value={selectedPlan} style={control} disabled={busy} onChange={event => setPlan(event.target.value === 'start-plan' ? 'start-plan' : 'coding-plan')}>
+          <option value="coding-plan">Coding Plan</option><option value="start-plan">Start Plan</option>
+        </select>
+      </label>
+    </div>
     <Section title="账号">
-      <Account key={selected} platform={selected} account={account} controller={controller} pending={state.pending} />
+      <Account key={`${selected}:${selectedPlan}`} platform={selected} plan={selectedPlan} account={account} controller={controller} pending={state.pending} />
     </Section>
-    <Section title="模型" action={<Button size="sm" variant="ghost" disabled={busy || account?.state !== 'ready'} onClick={() => { void controller.run('refreshModels', selected) }}>刷新</Button>}>
+    <Section title="模型" action={<Button size="sm" variant="ghost" disabled={busy || account?.state !== 'ready'} onClick={() => { void controller.run('refreshModels', selected, selectedPlan) }}>刷新</Button>}>
       {models.length ? <><p style={{ margin: '0 0 8px' }}>在 DSH 模型选择器中选择：</p><ul style={{ margin: 0, paddingLeft: 20 }}>{models.map(model => <li key={model.id}>{model.name}</li>)}</ul></> : <p style={hint}>{account?.state === 'ready' ? '暂无可用模型，可刷新目录。' : '登录后可查看模型。'}</p>}
     </Section>
-    <Section title="用量" action={<Button size="sm" variant="ghost" disabled={busy || !connected} onClick={() => { void controller.run('refreshQuota', selected) }}>刷新</Button>}>
+    <Section title="用量" action={<Button size="sm" variant="ghost" disabled={busy || !connected} onClick={() => { void controller.run('refreshQuota', selected, selectedPlan) }}>刷新</Button>}>
       {quota?.errorCode && <p role="status" style={hint}>用量读取失败，请刷新重试。</p>}
       {quota?.snapshot ? <Quota snapshot={quota.snapshot} /> : <p style={hint}>{connected ? '暂无用量数据。' : '登录后可查看用量。'}</p>}
     </Section>
@@ -63,7 +74,7 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
   </section>
 }
 
-function Account({ platform, account, controller, pending }: { platform: Platform; account?: AccountStatus; controller: ZCodeController; pending?: string }) {
+function Account({ platform, plan, account, controller, pending }: { platform: Platform; plan: Plan; account?: AccountStatus; controller: ZCodeController; pending?: string }) {
   const [key, setKey] = useState('')
   const current = account?.state ?? 'signed_out'
   const busy = Boolean(pending)
@@ -74,10 +85,11 @@ function Account({ platform, account, controller, pending }: { platform: Platfor
     signed_out: '未登录', authorizing: '等待浏览器授权', ready: '已连接',
     reauth_required: '登录已失效，请重新登录', quota_exhausted: '套餐额度已用尽', error: '连接遇到问题，请重试',
   }
+  const accountLabel = account?.errorCode === 'ZCODE_START_LOGIN_REQUIRED' ? '请使用网页登录 Start Plan' : label[current]
   const authorizedUrl = safeAuthorizationUrl(account?.login?.authorizeUrl)
   return <>
     <div style={spread}>
-      <span role="status">{cancelling ? '正在取消登录' : initializing ? '正在准备授权' : label[current]}{account?.accountLabel ? ` · ${account.accountLabel}` : ''}</span>
+      <span role="status">{cancelling ? '正在取消登录' : initializing ? '正在准备授权' : accountLabel}{account?.accountLabel ? ` · ${account.accountLabel}` : ''}</span>
       <div style={row}>
         {authorizing ? <>
           {authorizedUrl && !initializing && !cancelling && <a href={authorizedUrl} target="_blank" rel="noopener noreferrer">打开授权页</a>}
@@ -89,7 +101,7 @@ function Account({ platform, account, controller, pending }: { platform: Platfor
       </div>
     </div>
     {current === 'authorizing' && !initializing && !cancelling && <p style={hint}>请在浏览器中完成授权，然后返回此页面。</p>}
-    <details style={{ marginTop: 16 }}>
+    {plan === 'coding-plan' && <details style={{ marginTop: 16 }}>
       <summary style={{ cursor: 'pointer', fontSize: 13 }}>使用手工套餐 Key</summary>
       <form style={{ ...row, marginTop: 12 }} onSubmit={event => {
         event.preventDefault()
@@ -100,7 +112,7 @@ function Account({ platform, account, controller, pending }: { platform: Platfor
         <input id={`zcode-key-${platform}`} type="password" autoComplete="off" value={key} onChange={event => setKey(event.target.value)} style={{ ...control, flex: '1 1 220px' }} disabled={busy} />
         <Button size="sm" type="submit" disabled={busy || !key.trim()}>保存</Button>
       </form>
-    </details>
+    </details>}
   </>
 }
 

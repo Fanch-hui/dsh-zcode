@@ -1,5 +1,6 @@
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, FinishReason, StreamChunk, TokenUsage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { startPlanBusinessFailure } from '../transport/start-plan.js'
 import { fingerprint, replayEnvelope, type ReplayBlock } from './replay.js'
 import { readEvents } from './sse.js'
 import type { ProtocolContext, WireObject } from './types.js'
@@ -128,6 +129,19 @@ function inBandError(event: WireObject, observed: boolean): FinishReason {
   return { kind: 'error', failure: { code, message: '模型服务返回错误，请检查连接后重试。' } }
 }
 
+function startPlanError(event: WireObject, observed: boolean): FinishReason | undefined {
+  const failure = startPlanBusinessFailure(event)
+  if (failure) {
+    if (observed) return inBandError(event, true)
+    return { kind: 'error', failure: failure.failure }
+  }
+  if (event.type !== 'error' || (event.error && typeof event.error === 'object' && !Array.isArray(event.error))) return undefined
+  return { kind: 'error', failure: {
+    code: observed ? 'ZCODE_STREAM_INTERRUPTED' : 'ZCODE_STREAM_ERROR',
+    message: observed ? '模型输出中断，请重试。' : 'Start Plan 服务返回错误，请检查连接后重试。',
+  } }
+}
+
 /** Translate Anthropic Messages SSE into DSH chunks with lossless native replay metadata. */
 export async function* parseStream(
   body: ReadableStream<Uint8Array>, context: ProtocolContext, signal?: AbortSignal,
@@ -142,6 +156,13 @@ export async function* parseStream(
   for await (const event of readEvents(body, signal)) {
     signal?.throwIfAborted()
     if (event.type === 'ping') continue
+    if (context.plan === 'start-plan') {
+      const failure = startPlanError(event, observed)
+      if (failure) {
+        yield { type: 'finish', reason: failure }
+        return
+      }
+    }
     if (event.type === 'error') {
       yield { type: 'finish', reason: inBandError(event, observed) }
       return

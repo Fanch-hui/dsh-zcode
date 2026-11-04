@@ -100,7 +100,7 @@ export class EndpointRouter {
     signal?: AbortSignal): Promise<{ url: string; headers?: Record<string, string> }> {
     this.assertActive(account, signal)
     const original = new URL(modelEndpoint(account))
-    if (account.mode === 'api-key') return { url: original.href }
+    if (account.plan === 'start-plan' || account.mode === 'api-key') return { url: original.href }
     const entry = this.entryFor(account, credential.revision)
     const snapshot = await this.snapshot(entry, credential.routing?.apiKeyId, signal)
     this.assertActive(account, signal)

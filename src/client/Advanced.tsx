@@ -2,13 +2,13 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigPageForm } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 
-interface Draft { platform: string; concurrency: string; maxTokens: string; timeoutMs: string; effort: string }
+interface Draft { platform: string; plan: string; concurrency: string; maxTokens: string; timeoutMs: string; effort: string }
 const border = '1px solid var(--dsw-alias-border-default, color-mix(in srgb, currentColor 14%, transparent))'
 const control: CSSProperties = { color: 'inherit', background: 'var(--dsw-alias-bg-base, transparent)', border, borderRadius: 6, padding: '7px 10px', font: 'inherit', width: '100%', boxSizing: 'border-box' }
 
 function toDraft(value: Record<string, unknown>): Draft {
   return {
-    platform: String(value.platform ?? 'bigmodel'), concurrency: String(value.concurrency ?? 2),
+    platform: String(value.platform ?? 'bigmodel'), plan: String(value.plan ?? 'coding-plan'), concurrency: String(value.concurrency ?? 2),
     maxTokens: String(value.maxTokens ?? 32000), timeoutMs: String(value.timeoutMs ?? 300000),
     effort: String(value.effort ?? 'high'),
   }
@@ -47,6 +47,7 @@ function AdvancedFields({ form }: { form: ConfigPageForm }) {
     try {
       const accepted = await form.mutate([
         { op: 'set', path: ['platform'], value: draft.platform },
+        { op: 'set', path: ['plan'], value: draft.plan },
         { op: 'set', path: ['concurrency'], value: concurrency },
         { op: 'set', path: ['maxTokens'], value: maxTokens },
         { op: 'set', path: ['timeoutMs'], value: timeoutMs },
@@ -61,6 +62,7 @@ function AdvancedFields({ form }: { form: ConfigPageForm }) {
   const disabled = !form.state.writable || saving
   return <form onSubmit={event => { event.preventDefault(); void save() }} aria-label="ZCode 高级设置" style={{ maxWidth: 520, display: 'grid', gap: 16, fontSize: 14 }}>
     <Field label="默认平台"><select style={control} value={draft.platform} disabled={disabled} onChange={event => edit('platform', event.target.value)}><option value="bigmodel">智谱 BigModel</option><option value="zai">Z.AI</option></select></Field>
+    <Field label="默认套餐"><select style={control} value={draft.plan} disabled={disabled} onChange={event => edit('plan', event.target.value)}><option value="coding-plan">Coding Plan</option><option value="start-plan">Start Plan</option></select></Field>
     <Field label="并发请求数"><input style={control} type="number" min="1" max="8" step="1" value={draft.concurrency} disabled={disabled} onChange={event => edit('concurrency', event.target.value)} /></Field>
     <Field label="单次输出上限"><input style={control} type="number" min="1" max="128000" step="1" value={draft.maxTokens} disabled={disabled} onChange={event => edit('maxTokens', event.target.value)} /></Field>
     <Field label="请求超时（毫秒）"><input style={control} type="number" min="10000" max="1800000" step="1000" value={draft.timeoutMs} disabled={disabled} onChange={event => edit('timeoutMs', event.target.value)} /></Field>

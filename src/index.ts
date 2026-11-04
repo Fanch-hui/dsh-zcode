@@ -9,6 +9,7 @@ import { ZCodeAdapter } from './provider/adapter.js'
 import { PROVIDERS } from './provider/catalog.js'
 import { ZCodeRuntime } from './runtime.js'
 import { DshCredentialStore } from './storage/credentials.js'
+import { createDeviceId } from './storage/device.js'
 import { createNetwork } from './transport/network.js'
 import { registerAuthorizationFlows } from './cli/authorization.js'
 
@@ -22,6 +23,7 @@ export function apply(ctx: Context, config: Config): void {
   let runtime: ZCodeRuntime | undefined
   const auth = new ZcodeAuth({
     store: new DshCredentialStore(ctx.credentials), fetch: network.fetch,
+    deviceId: createDeviceId(ctx.profileContext.dir),
     onChange: account => runtime?.onAccountChanged(account),
   })
   runtime = new ZCodeRuntime(auth, settings, provider => ctx.emit('llm/models-updated', provider))

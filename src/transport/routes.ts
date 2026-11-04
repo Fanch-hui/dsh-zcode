@@ -6,5 +6,6 @@ const endpoints = {
 } as const
 
 export function modelEndpoint(account: AccountSnapshot): string {
+  if (account.plan === 'start-plan') return 'https://zcode.z.ai/api/v1/zcode-plan/anthropic/v1/messages'
   return endpoints[account.platform]
 }

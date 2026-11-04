@@ -1,11 +1,11 @@
 import type { Settings } from '../config.js'
-import type { AccountStatus, Platform, QuotaSnapshot } from '../types.js'
+import type { AccountStatus, Plan, Platform, QuotaSnapshot } from '../types.js'
 
 export interface ZCodeStatus {
   accounts: AccountStatus[]
   settings: Settings
   models: { provider: string; id: string; name: string }[]
-  quotas: { platform: Platform; snapshot?: QuotaSnapshot; errorCode?: string }[]
+  quotas: { platform: Platform; plan?: Plan; snapshot?: QuotaSnapshot; errorCode?: string }[]
 }
 
 export interface KeyInput { platform: Platform; key: string }
@@ -16,7 +16,7 @@ export interface ControlOperations {
   cancelLogin(platform: Platform): Promise<ZCodeStatus>
   disconnect(platform: Platform): Promise<ZCodeStatus>
   useApiKey(input: KeyInput): Promise<ZCodeStatus>
-  refreshModels(platform: Platform): Promise<ZCodeStatus>
-  readQuota(platform: Platform): Promise<ZCodeStatus>
-  refreshQuota(platform: Platform): Promise<ZCodeStatus>
+  refreshModels(platform: Platform, plan?: Plan): Promise<ZCodeStatus>
+  readQuota(platform: Platform, plan?: Plan): Promise<ZCodeStatus>
+  refreshQuota(platform: Platform, plan?: Plan): Promise<ZCodeStatus>
 }

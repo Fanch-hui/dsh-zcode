@@ -1,31 +1,35 @@
-import type { AuthPort, Platform, QuotaSnapshot } from '../types.js'
+import type { AuthPort, Plan, Platform, QuotaSnapshot } from '../types.js'
 import { accountState, login } from './login.js'
 
 type CliAction = 'login' | 'status' | 'quota' | 'disconnect' | 'help'
-export interface CliArgs { action: CliAction; platform: Platform; home?: string }
+export interface CliArgs { action: CliAction; platform: Platform; plan?: Plan; home?: string }
 export interface CliIO { out(value: string): void; error(value: string): void }
 export interface CliEnvironment { auth: AuthPort; close(): Promise<void> }
 
-const USAGE = '用法：dsh-zcode <login|status|quota|disconnect> [--platform bigmodel|zai] [--home DSH目录]'
+const USAGE = '用法：dsh-zcode <login|status|quota|disconnect> [--platform bigmodel|zai] [--plan coding-plan|start-plan] [--home DSH目录]'
 
 export function parseArgs(args: readonly string[]): CliArgs {
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') return { action: 'help', platform: 'bigmodel' }
   const action = args[0]
   if (action !== 'login' && action !== 'status' && action !== 'quota' && action !== 'disconnect') throw new Error('ZCODE_CLI_USAGE')
   let platform: Platform = 'bigmodel'
+  let plan: Plan | undefined
   let home: string | undefined
   const seen = new Set<string>()
   for (let index = 1; index < args.length; index++) {
     const option = args[index]
     const value = args[++index]
-    if ((option !== '--platform' && option !== '--home') || !value || seen.has(option)) throw new Error('ZCODE_CLI_USAGE')
+    if ((option !== '--platform' && option !== '--home' && option !== '--plan') || !value || seen.has(option)) throw new Error('ZCODE_CLI_USAGE')
     seen.add(option)
     if (option === '--platform') {
       if (value !== 'bigmodel' && value !== 'zai') throw new Error('ZCODE_CLI_USAGE')
       platform = value
+    } else if (option === '--plan') {
+      if (value !== 'coding-plan' && value !== 'start-plan') throw new Error('ZCODE_CLI_USAGE')
+      plan = value
     } else home = value
   }
-  return { action, platform, ...(home === undefined ? {} : { home }) }
+  return { action, platform, ...(plan ? { plan } : {}), ...(home === undefined ? {} : { home }) }
 }
 
 function quotaText(quota: QuotaSnapshot): string {
@@ -57,9 +61,9 @@ export async function runCli(
       await login(auth, command.platform, signal, url => io.out(`请在浏览器打开授权地址：\n${url}\n按 Ctrl+C 取消登录。`))
       io.out('登录成功。')
     } else if (command.action === 'status') {
-      io.out(accountState(await auth.status(command.platform)))
+      io.out(accountState(await auth.status(command.platform, command.plan)))
     } else if (command.action === 'quota') {
-      const account = await auth.snapshot(command.platform, signal)
+      const account = await auth.snapshot(command.platform, signal, command.plan)
       io.out(quotaText(await auth.queryQuota(account, signal, true)))
     } else {
       await auth.disconnect(command.platform)

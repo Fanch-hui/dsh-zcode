@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { Context } from '@deepseek-ai/cordis'
 import { LocalCredentialProvider } from '@deepseek-ai/dsh-credentials-local'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { ZcodeAuth } from '../auth/index.js'
 import { DshCredentialStore } from '../storage/credentials.js'
+import { createDeviceId } from '../storage/device.js'
 import { createNetwork } from '../transport/network.js'
 import { runCli, type CliEnvironment } from './commands.js'
 
@@ -11,7 +13,10 @@ async function open(home?: string): Promise<CliEnvironment> {
   try {
     await ctx.plugin(LocalCredentialProvider, { ...(home ? { dshHome: home } : {}), watch: true })
     const network = createNetwork()
-    const auth = new ZcodeAuth({ store: new DshCredentialStore(ctx.credentials), fetch: network.fetch })
+    const auth = new ZcodeAuth({
+      store: new DshCredentialStore(ctx.credentials), fetch: network.fetch,
+      deviceId: createDeviceId(resolveDshHome(home)),
+    })
     return {
       auth,
       async close() {

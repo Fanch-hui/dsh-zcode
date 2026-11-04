@@ -18,11 +18,13 @@ test('the native Host mounts providers against loader-owned Typert and disposes 
     await ctx.plugin(TypertRegistry)
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(LocalCredentialProvider, { dshHome: home, watch: false })
-    ctx.provide('profileContext', { dir: '/synthetic/profile' })
+    ctx.provide('profileContext', { dir: join(home, 'profiles', 'desktop') })
     ctx.provide('attachments', { readImage: async () => { throw new Error('no image requested') } })
     ctx.typert.register(TYPERT)
     const fiber = await ctx.plugin(plugin, {})
-    assert.deepEqual(ctx.llm.listProviders().map(provider => provider.id).sort(), ['zcode-bigmodel', 'zcode-zai'])
+    assert.deepEqual(ctx.llm.listProviders().map(provider => provider.id).sort(), [
+      'zcode-bigmodel', 'zcode-bigmodel-start-plan', 'zcode-zai', 'zcode-zai-start-plan',
+    ])
     assert.equal((await ctx.llm.listModels('zcode-bigmodel')).length, 2)
     const control = ctx.get('zcode') as { status(): Promise<unknown> }
     assert.equal(statusSchema.parse(await control.status()).accounts[0].state, 'signed_out')

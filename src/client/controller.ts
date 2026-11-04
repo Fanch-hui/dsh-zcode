@@ -1,5 +1,5 @@
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import type { Platform } from '../types.js'
+import type { Plan, Platform } from '../types.js'
 import type { ControlOperations, KeyInput, ZCodeStatus } from '../control/types.js'
 
 export interface RemoteFace {
@@ -8,9 +8,9 @@ export interface RemoteFace {
   cancelLogin(platform: Platform): Promise<RemoteResult<ZCodeStatus>>
   disconnect(platform: Platform): Promise<RemoteResult<ZCodeStatus>>
   useApiKey(input: KeyInput): Promise<RemoteResult<ZCodeStatus>>
-  refreshModels(platform: Platform): Promise<RemoteResult<ZCodeStatus>>
-  readQuota(platform: Platform): Promise<RemoteResult<ZCodeStatus>>
-  refreshQuota(platform: Platform): Promise<RemoteResult<ZCodeStatus>>
+  refreshModels(platform: Platform, plan?: Plan): Promise<RemoteResult<ZCodeStatus>>
+  readQuota(platform: Platform, plan?: Plan): Promise<RemoteResult<ZCodeStatus>>
+  refreshQuota(platform: Platform, plan?: Plan): Promise<RemoteResult<ZCodeStatus>>
 }
 
 type Action = Exclude<keyof ControlOperations, 'status' | 'useApiKey'>
@@ -64,9 +64,15 @@ export class ZCodeController {
     return task
   }
 
-  async run(action: Action, platform: Platform): Promise<boolean> {
+  async run(action: Action, platform: Platform, plan?: Plan): Promise<boolean> {
     const cancellingStart = action === 'cancelLogin' && this.value.pending === 'beginLogin' && this.pendingPlatform === platform
-    return this.mutate(action, platform, () => this.remote[action](platform), cancellingStart)
+    const invoke = () => {
+      if (action === 'refreshModels' || action === 'readQuota' || action === 'refreshQuota') {
+        return this.remote[action](platform, plan)
+      }
+      return this.remote[action](platform)
+    }
+    return this.mutate(action, platform, invoke, cancellingStart)
   }
 
   async setKey(input: KeyInput): Promise<boolean> {

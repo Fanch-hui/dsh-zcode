@@ -1,9 +1,10 @@
 import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { Platform } from './types.js'
+import type { Plan, Platform } from './types.js'
 
 export interface Settings {
   platform: Platform
+  plan?: Plan
   concurrency: number
   maxTokens: number
   timeoutMs: number
@@ -12,6 +13,7 @@ export interface Settings {
 
 export interface Config {
   platform: Volatile<Platform>
+  plan: Volatile<Plan>
   concurrency: Volatile<number>
   maxTokens: Volatile<number>
   timeoutMs: Volatile<number>
@@ -20,6 +22,7 @@ export interface Config {
 
 export const Config = z.object({
   platform: z.union(['bigmodel', 'zai']).default('bigmodel').volatile(),
+  plan: z.union(['coding-plan', 'start-plan']).default('coding-plan').volatile(),
   concurrency: z.number().step(1).min(1).max(8).default(2).volatile(),
   maxTokens: z.number().step(1).min(1).max(128000).default(32000).volatile(),
   timeoutMs: z.number().step(1000).min(10000).max(1800000).default(300000).volatile(),
@@ -28,7 +31,7 @@ export const Config = z.object({
 
 export function readSettings(config: Config): Settings {
   return {
-    platform: config.platform.get(), concurrency: config.concurrency.get(),
+    platform: config.platform.get(), plan: config.plan.get(), concurrency: config.concurrency.get(),
     maxTokens: config.maxTokens.get(), timeoutMs: config.timeoutMs.get(), effort: config.effort.get(),
   }
 }

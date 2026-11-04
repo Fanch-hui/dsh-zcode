@@ -1,6 +1,6 @@
 {
   "name": "dsh-zcode",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "ZCode Coding Plan providers for DeepSeek Harness",
   "type": "module",
   "license": "Apache-2.0",

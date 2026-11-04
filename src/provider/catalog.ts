@@ -1,15 +1,21 @@
 import { LlmError, ReasoningEffortId, type LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
 import type { Settings } from '../config.js'
-import type { Platform } from '../types.js'
+import type { Plan, Platform } from '../types.js'
+import { PROVIDER_DEFINITIONS } from './identity.js'
 
-export const PROVIDERS = ['zcode-bigmodel', 'zcode-zai'] as const
+export { providerFor } from './identity.js'
+export const PROVIDERS = PROVIDER_DEFINITIONS.map(provider => provider.id)
 export const MODELS = ['GLM-5.3', 'GLM-5.3-Flash'] as const
 
-export function platformFor(provider: string): Platform {
-  if (provider === 'zcode-bigmodel') return 'bigmodel'
-  if (provider === 'zcode-zai') return 'zai'
-  throw new LlmError('未知的 ZCode 平台。', 'NO_ADAPTER')
+function providerDefinition(provider: string) {
+  const found = PROVIDER_DEFINITIONS.find(entry => entry.id === provider)
+  if (!found) throw new LlmError('未知的 ZCode 平台。', 'NO_ADAPTER')
+  return found
 }
+
+export function platformFor(provider: string): Platform { return providerDefinition(provider).platform }
+export function planFor(provider: string): Plan { return providerDefinition(provider).plan }
+export function providerName(provider: string): string { return providerDefinition(provider).name }
 
 export function resolveModel(provider: string, model: string, settings: Settings): LlmResolvedModelInfo {
   platformFor(provider)
