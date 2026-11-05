@@ -1,8 +1,10 @@
+import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { AuthPort, AccountStatus, Plan, Platform, QuotaSnapshot } from './types.js'
 import type { Settings } from './config.js'
 import type { ControlOperations, KeyInput, ZCodeStatus } from './control/types.js'
 import { AuthError } from './auth/http.js'
 import { MODELS, PROVIDERS, providerFor, resolveModel } from './provider/catalog.js'
+import { TokenUsageTracker } from './usage.js'
 
 interface QuotaView { scope: string; generation: number; snapshot?: QuotaSnapshot; errorCode?: string }
 const platforms: readonly Platform[] = ['bigmodel', 'zai']
@@ -12,6 +14,7 @@ const quotaKey = (platform: Platform, plan: Plan) => `${platform}:${plan}`
 export class ZCodeRuntime implements ControlOperations {
   private readonly quotas = new Map<string, QuotaView>()
   private readonly generations = new Map<Platform, number>()
+  private readonly usage = new TokenUsageTracker()
   private disposed = false
 
   constructor(private readonly auth: AuthPort, private readonly settings: () => Settings,
@@ -23,7 +26,7 @@ export class ZCodeRuntime implements ControlOperations {
     }))))
     const settings = this.settings()
     return {
-      accounts, settings,
+      accounts, settings, usage: this.usage.snapshot(),
       models: PROVIDERS.flatMap(provider => MODELS.map(id => {
         const model = resolveModel(provider, id, settings)
         return { provider, id, name: model.name }
@@ -37,6 +40,8 @@ export class ZCodeRuntime implements ControlOperations {
       }),
     }
   }
+
+  recordUsage(usage: TokenUsage): void { this.usage.record(usage) }
 
   onAccountChanged(account: AccountStatus): void {
     if (this.disposed) return

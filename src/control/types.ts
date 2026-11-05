@@ -1,11 +1,12 @@
 import type { Settings } from '../config.js'
-import type { AccountStatus, Plan, Platform, QuotaSnapshot } from '../types.js'
+import type { AccountStatus, Plan, Platform, QuotaSnapshot, TokenUsageTotals } from '../types.js'
 
 export interface ZCodeStatus {
   accounts: AccountStatus[]
   settings: Settings
   models: { provider: string; id: string; name: string }[]
   quotas: { platform: Platform; plan?: Plan; snapshot?: QuotaSnapshot; errorCode?: string }[]
+  usage?: TokenUsageTotals
 }
 
 export interface KeyInput { platform: Platform; key: string }

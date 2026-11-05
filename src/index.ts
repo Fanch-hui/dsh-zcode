@@ -28,6 +28,7 @@ export function apply(ctx: Context, config: Config): void {
   runtime = new ZCodeRuntime(auth, settings, provider => ctx.emit('llm/models-updated', provider))
   const adapter = new ZCodeAdapter({
     auth, settings, sessionScope: ctx.profileContext.dir,
+    onUsage: usage => runtime?.recordUsage(usage),
     image: async (block, signal) => {
       const image = await ctx.attachments.readImage(block.attachment, signal)
       return `data:${image.ref.mediaType};base64,${Buffer.from(image.data).toString('base64')}`

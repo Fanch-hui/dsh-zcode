@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import {
   LlmAdapter, LlmError, attributionHeaders, resolveRetryPolicy, projectImagesForTextModel,
-  type GenerateOptions, type StreamChunk, type PreparedAdapterCall,
+  type GenerateOptions, type StreamChunk, type PreparedAdapterCall, type TokenUsage,
 } from '@deepseek-ai/dsh-llm'
 import type { Settings } from '../config.js'
 import type { AccountSnapshot, AuthPort, RequestCredential } from '../types.js'
@@ -20,6 +20,7 @@ export interface AdapterDependencies {
   image?: ResolveImage
   sessionScope?: string
   scheduler?: RequestScheduler
+  onUsage?: (usage: TokenUsage) => void
 }
 
 export class ZCodeAdapter extends LlmAdapter {
@@ -152,6 +153,7 @@ export class ZCodeAdapter extends LlmAdapter {
       if (!response.body) throw new LlmError('平台返回空响应。', 'TRANSPORT')
       for await (let chunk of parseStream(response.body, context, signal)) {
         signal.throwIfAborted()
+        if (chunk.type === 'usage') this.dependencies.onUsage?.(chunk.usage)
         if (chunk.type === 'finish' && chunk.reason.kind === 'error') {
           const code = chunk.reason.failure.code
           if (code === 'QUOTA_EXHAUSTED' && account.plan !== 'start-plan') {

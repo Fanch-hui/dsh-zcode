@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { AccountStatus, Plan, Platform, QuotaSnapshot } from '../types.js'
+import type { AccountStatus, Plan, Platform, QuotaSnapshot, TokenUsageTotals } from '../types.js'
 import { providerFor } from '../provider/identity.js'
 import type { ZCodeController } from './controller.js'
 
@@ -63,6 +63,9 @@ export function Settings({ controller }: { controller: ZCodeController }) {
     <Section title="用量" action={<Button size="sm" variant="ghost" disabled={busy || !connected} onClick={() => { void controller.run('refreshQuota', selected, selectedPlan) }}>刷新</Button>}>
       {quota?.errorCode && <p role="status" style={hint}>用量读取失败，请刷新重试。</p>}
       {quota?.snapshot ? <Quota snapshot={quota.snapshot} /> : <p style={hint}>{connected ? '暂无用量数据。' : '登录后可查看用量。'}</p>}
+    </Section>
+    <Section title="Token 统计" action={<Button size="sm" variant="ghost" disabled={busy} onClick={() => { void controller.refresh() }}>刷新</Button>}>
+      <Usage totals={state.status?.usage} />
     </Section>
     <p style={hint}>并发数、输出上限和请求超时可在下方插件配置中调整。</p>
   </div>
@@ -130,6 +133,23 @@ function Quota({ snapshot }: { snapshot: QuotaSnapshot }) {
       </div>)}
     </dl>
     <p style={hint}>更新于 {new Date(snapshot.updatedAt).toLocaleString()}</p>
+  </>
+}
+
+function Usage({ totals }: { totals?: TokenUsageTotals }) {
+  if (!totals) return <p style={hint}>暂无统计数据。</p>
+  const rows: [string, string][] = [
+    ['总 token', totals.total.toLocaleString()],
+    ['输入 token', totals.input.toLocaleString()],
+    ['输出 token', totals.output.toLocaleString()],
+    ['缓存读取', totals.cacheRead.toLocaleString()],
+    ['缓存命中率', `${totals.hitRate.toFixed(1)}%`],
+  ]
+  return <>
+    <dl style={{ margin: 0, display: 'grid', gap: 10 }}>
+      {rows.map(([label, value]) => <div key={label} style={spread}><dt>{label}</dt><dd style={{ margin: 0 }}>{value}</dd></div>)}
+    </dl>
+    <p style={hint}>自插件启动以来累计。输入含缓存读取与写入，命中率按缓存读取 / 输入计算。</p>
   </>
 }
 

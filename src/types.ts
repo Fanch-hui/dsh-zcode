@@ -38,6 +38,18 @@ export interface QuotaWindow {
   unit?: string
 }
 export interface QuotaSnapshot { updatedAt: number; windows: QuotaWindow[]; unavailable?: boolean }
+/** Cumulative token counters for the running Host process. */
+export interface TokenUsageTotals {
+  /** All input tokens (cached and uncached) plus output tokens. */
+  total: number
+  /** Uncached input plus cache reads and cache writes. */
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  /** Percentage of input tokens served from cache. */
+  hitRate: number
+}
 export interface AuthPort {
   status(platform: Platform, plan?: Plan): Promise<AccountStatus>
   beginLogin(platform: Platform, signal?: AbortSignal): Promise<AccountStatus>

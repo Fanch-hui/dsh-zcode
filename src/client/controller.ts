@@ -113,8 +113,9 @@ export class ZCodeController {
 
   private schedule(): void {
     clearTimeout(this.timer)
-    if (!this.disposed && this.watching && !this.value.pending && this.value.status?.accounts.some(a => a.state === 'authorizing')) {
-      this.timer = setTimeout(() => { void this.refresh() }, 2000)
+    if (!this.disposed && this.watching && !this.value.pending) {
+      const authorizing = this.value.status?.accounts.some(a => a.state === 'authorizing')
+      this.timer = setTimeout(() => { void this.refresh() }, authorizing ? 2000 : 5000)
     }
   }
 
