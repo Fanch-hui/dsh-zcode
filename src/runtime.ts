@@ -1,5 +1,5 @@
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
-import type { AuthPort, AccountStatus, Plan, Platform, QuotaSnapshot } from './types.js'
+import type { AuthPort, AccountStatus, ModelRoute, Plan, Platform, QuotaSnapshot } from './types.js'
 import type { Settings } from './config.js'
 import type { ControlOperations, KeyInput, ZCodeStatus } from './control/types.js'
 import { AuthError } from './auth/http.js'
@@ -41,7 +41,7 @@ export class ZCodeRuntime implements ControlOperations {
     }
   }
 
-  recordUsage(usage: TokenUsage): void { this.usage.record(usage) }
+  recordUsage(route: ModelRoute, usage: TokenUsage): void { this.usage.record(route, usage) }
 
   onAccountChanged(account: AccountStatus): void {
     if (this.disposed) return

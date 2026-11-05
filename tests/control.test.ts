@@ -19,10 +19,12 @@ test('remote boundary rejects secrets and unexpected fields in status', () => {
   assert.equal(statusSchema.safeParse({ ...safe, token: 'fixture-secret' }).success, false)
   assert.equal(statusSchema.safeParse({ ...safe, accounts: [{ ...safe.accounts[0], token: 'fixture-secret' }] }).success, false)
   assert.equal(keyInputSchema.safeParse({ platform: 'bigmodel', key: 'fixture-secret', extra: true }).success, false)
-  const usage = { total: 18, input: 15, output: 3, cacheRead: 5, cacheWrite: 0, hitRate: 33.3 }
+  const totals = { total: 18, input: 15, output: 3, cacheRead: 5, cacheWrite: 0, hitRate: 33.3 }
+  const model = { provider: 'zcode-bigmodel', model: 'GLM-5.3', calls: 1, totals }
+  const usage = { totals, models: [model] }
   assert.equal(statusSchema.safeParse({ ...safe, usage }).success, true)
   assert.equal(statusSchema.safeParse({ ...safe, usage: { ...usage, secret: 1 } }).success, false)
-  assert.equal(statusSchema.safeParse({ ...safe, usage: { ...usage, hitRate: 101 } }).success, false)
+  assert.equal(statusSchema.safeParse({ ...safe, usage: { ...usage, models: [{ ...model, totals: { ...totals, hitRate: 101 } }] } }).success, false)
   const start = { ...safe, accounts: [...safe.accounts, { platform: 'zai', plan: 'start-plan', state: 'ready', generation: 1 }],
     settings: { ...safe.settings, plan: 'start-plan' }, quotas: [{ platform: 'zai', plan: 'start-plan' }] }
   assert.equal(statusSchema.safeParse(start).success, true)

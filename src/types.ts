@@ -38,7 +38,9 @@ export interface QuotaWindow {
   unit?: string
 }
 export interface QuotaSnapshot { updatedAt: number; windows: QuotaWindow[]; unavailable?: boolean }
-/** Cumulative token counters for the running Host process. */
+/** Model route of one call made through this plugin. */
+export interface ModelRoute { provider: string; model: string }
+/** Cumulative token counters for one model route or their sum. */
 export interface TokenUsageTotals {
   /** All input tokens (cached and uncached) plus output tokens. */
   total: number
@@ -49,6 +51,15 @@ export interface TokenUsageTotals {
   cacheWrite: number
   /** Percentage of input tokens served from cache. */
   hitRate: number
+}
+export interface ModelUsage extends ModelRoute {
+  calls: number
+  totals: TokenUsageTotals
+}
+export interface UsageSnapshot {
+  /** Sum over every model route, derived from the same counters. */
+  totals: TokenUsageTotals
+  models: ModelUsage[]
 }
 export interface AuthPort {
   status(platform: Platform, plan?: Plan): Promise<AccountStatus>

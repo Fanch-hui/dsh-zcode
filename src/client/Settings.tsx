@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { AccountStatus, Plan, Platform, QuotaSnapshot, TokenUsageTotals } from '../types.js'
-import { providerFor } from '../provider/identity.js'
+import type { AccountStatus, Plan, Platform, QuotaSnapshot, TokenUsageTotals, UsageSnapshot } from '../types.js'
+import { PROVIDER_DEFINITIONS, providerFor } from '../provider/identity.js'
 import type { ZCodeController } from './controller.js'
 
 const secondary = 'var(--dsw-alias-text-secondary)'
@@ -65,7 +65,7 @@ export function Settings({ controller }: { controller: ZCodeController }) {
       {quota?.snapshot ? <Quota snapshot={quota.snapshot} /> : <p style={hint}>{connected ? '暂无用量数据。' : '登录后可查看用量。'}</p>}
     </Section>
     <Section title="Token 统计" action={<Button size="sm" variant="ghost" disabled={busy} onClick={() => { void controller.refresh() }}>刷新</Button>}>
-      <Usage totals={state.status?.usage} />
+      <Usage usage={state.status?.usage} />
     </Section>
     <p style={hint}>并发数、输出上限和请求超时可在下方插件配置中调整。</p>
   </div>
@@ -136,20 +136,35 @@ function Quota({ snapshot }: { snapshot: QuotaSnapshot }) {
   </>
 }
 
-function Usage({ totals }: { totals?: TokenUsageTotals }) {
-  if (!totals) return <p style={hint}>暂无统计数据。</p>
-  const rows: [string, string][] = [
-    ['总 token', totals.total.toLocaleString()],
-    ['输入 token', totals.input.toLocaleString()],
-    ['输出 token', totals.output.toLocaleString()],
-    ['缓存读取', totals.cacheRead.toLocaleString()],
-    ['缓存命中率', `${totals.hitRate.toFixed(1)}%`],
-  ]
+function Usage({ usage }: { usage?: UsageSnapshot }) {
+  if (!usage?.models.length) return <p style={hint}>暂无统计数据，发起一次模型调用后显示。</p>
+  const labelFor = (provider: string, model: string) =>
+    `${PROVIDER_DEFINITIONS.find(item => item.id === provider)?.name.replace('ZCode · ', '') ?? provider} · ${model}`
+  const cell: CSSProperties = { padding: '6px 10px 6px 0', whiteSpace: 'nowrap' }
+  const numeric: CSSProperties = { ...cell, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+  const columns = ['模型', '调用', '总 token', '输入', '输出', '缓存读取', '命中率']
+  const line = (label: string, calls: number, totals: TokenUsageTotals, bold = false) => <tr key={label} style={{ borderTop: border, ...(bold ? { fontWeight: 600 } : {}) }}>
+    <td style={cell}>{label}</td>
+    <td style={numeric}>{calls.toLocaleString()}</td>
+    <td style={numeric}>{totals.total.toLocaleString()}</td>
+    <td style={numeric}>{totals.input.toLocaleString()}</td>
+    <td style={numeric}>{totals.output.toLocaleString()}</td>
+    <td style={numeric}>{totals.cacheRead.toLocaleString()}</td>
+    <td style={numeric}>{totals.hitRate.toFixed(1)}%</td>
+  </tr>
   return <>
-    <dl style={{ margin: 0, display: 'grid', gap: 10 }}>
-      {rows.map(([label, value]) => <div key={label} style={spread}><dt>{label}</dt><dd style={{ margin: 0 }}>{value}</dd></div>)}
-    </dl>
-    <p style={hint}>自插件启动以来累计。输入含缓存读取与写入，命中率按缓存读取 / 输入计算。</p>
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 560 }}>
+        <thead><tr style={{ color: secondary, fontWeight: 400 }}>
+          {columns.map((name, index) => <th key={name} style={{ ...cell, textAlign: index ? 'right' : 'left' }}>{name}</th>)}
+        </tr></thead>
+        <tbody>
+          {usage.models.map(entry => line(labelFor(entry.provider, entry.model), entry.calls, entry.totals))}
+          {line('合计', usage.models.reduce((sum, entry) => sum + entry.calls, 0), usage.totals, true)}
+        </tbody>
+      </table>
+    </div>
+    <p style={hint}>自插件启动以来累计；每个套餐下的每个模型单独统计。输入含缓存读取与写入，命中率按缓存读取 / 输入计算。</p>
   </>
 }
 

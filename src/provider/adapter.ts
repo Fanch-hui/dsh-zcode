@@ -4,7 +4,7 @@ import {
   type GenerateOptions, type StreamChunk, type PreparedAdapterCall, type TokenUsage,
 } from '@deepseek-ai/dsh-llm'
 import type { Settings } from '../config.js'
-import type { AccountSnapshot, AuthPort, RequestCredential } from '../types.js'
+import type { AccountSnapshot, AuthPort, ModelRoute, RequestCredential } from '../types.js'
 import { buildRequest, parseStream, type ResolveImage } from '../protocol/index.js'
 import { RequestScheduler } from '../transport/scheduler.js'
 import { httpFailure, retryAfter } from '../transport/http.js'
@@ -20,7 +20,7 @@ export interface AdapterDependencies {
   image?: ResolveImage
   sessionScope?: string
   scheduler?: RequestScheduler
-  onUsage?: (usage: TokenUsage) => void
+  onUsage?: (route: ModelRoute, usage: TokenUsage) => void
 }
 
 export class ZCodeAdapter extends LlmAdapter {
@@ -153,7 +153,7 @@ export class ZCodeAdapter extends LlmAdapter {
       if (!response.body) throw new LlmError('平台返回空响应。', 'TRANSPORT')
       for await (let chunk of parseStream(response.body, context, signal)) {
         signal.throwIfAborted()
-        if (chunk.type === 'usage') this.dependencies.onUsage?.(chunk.usage)
+        if (chunk.type === 'usage') this.dependencies.onUsage?.({ provider: options.provider, model: options.model }, chunk.usage)
         if (chunk.type === 'finish' && chunk.reason.kind === 'error') {
           const code = chunk.reason.failure.code
           if (code === 'QUOTA_EXHAUSTED' && account.plan !== 'start-plan') {

@@ -30,9 +30,13 @@ const quotaSchema = z.strictObject({
   })).max(128),
   unavailable: z.boolean().optional(),
 })
-const usageSchema = z.strictObject({
+const totalsSchema = z.strictObject({
   total: timestamp, input: timestamp, output: timestamp, cacheRead: timestamp, cacheWrite: timestamp,
   hitRate: z.number().finite().min(0).max(100),
+})
+const usageSchema = z.strictObject({
+  totals: totalsSchema,
+  models: z.array(z.strictObject({ provider: identifier, model: identifier, calls: timestamp, totals: totalsSchema })).max(64),
 })
 export const statusSchema: z.ZodType<ZCodeStatus> = z.strictObject({
   accounts: z.array(accountSchema).max(4),

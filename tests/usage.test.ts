@@ -4,6 +4,7 @@ import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { ZCodeAdapter } from '../src/provider/adapter.js'
 import { ZCodeRuntime } from '../src/runtime.js'
 import { statusSchema } from '../src/control/remote.js'
+import { TokenUsageTracker } from '../src/usage.js'
 import type { AuthPort } from '../src/types.js'
 import type { Settings } from '../src/config.js'
 
@@ -40,19 +41,34 @@ async function consume(chunks: AsyncIterable<StreamChunk>): Promise<void> {
   for await (const chunk of chunks) void chunk
 }
 
-test('completed calls accumulate token totals, cache reads and hit rate in Host status', async () => {
+test('each model keeps its own usage totals while the overall sum is derived', async () => {
   const auth = fixtureAuth()
   const runtime = new ZCodeRuntime(auth, () => settings, () => {})
   const adapter = new ZCodeAdapter({ auth, settings: () => settings,
-    fetch: async () => answer(), onUsage: usage => runtime.recordUsage(usage) })
+    fetch: async () => answer(), onUsage: (route, usage) => runtime.recordUsage(route, usage) })
   try {
     await consume(adapter.stream(options))
-    const once = await runtime.status()
-    assert.deepEqual(once.usage, { total: 18, input: 15, output: 3, cacheRead: 5, cacheWrite: 0, hitRate: (5 / 15) * 100 })
-
     await consume(adapter.stream(options))
-    const twice = await runtime.status()
-    assert.deepEqual(twice.usage, { total: 36, input: 30, output: 6, cacheRead: 10, cacheWrite: 0, hitRate: (5 / 15) * 100 })
-    assert.deepEqual(statusSchema.parse(twice).usage, twice.usage)
+    await consume(adapter.stream({ ...options, model: 'GLM-5.3-Flash' }))
+    const status = await runtime.status()
+    const byModel = new Map((status.usage?.models ?? []).map(item => [item.model, item] as const))
+    assert.equal(byModel.size, 2)
+    assert.deepEqual(byModel.get('GLM-5.3')?.totals, { total: 36, input: 30, output: 6, cacheRead: 10, cacheWrite: 0, hitRate: (5 / 15) * 100 })
+    assert.equal(byModel.get('GLM-5.3')?.calls, 2)
+    assert.deepEqual(byModel.get('GLM-5.3-Flash')?.totals, { total: 18, input: 15, output: 3, cacheRead: 5, cacheWrite: 0, hitRate: (5 / 15) * 100 })
+    assert.equal(byModel.get('GLM-5.3-Flash')?.calls, 1)
+    assert.deepEqual(status.usage?.totals, { total: 54, input: 45, output: 9, cacheRead: 15, cacheWrite: 0, hitRate: (5 / 15) * 100 })
+    assert.equal(statusSchema.parse(status).usage?.models.length, 2)
   } finally { adapter.dispose(); runtime.dispose() }
+})
+
+test('the same model on different providers is tracked separately', () => {
+  const tracker = new TokenUsageTracker()
+  const usage = { inputTokens: 10, outputTokens: 3, cacheReadTokens: 5 }
+  tracker.record({ provider: 'zcode-bigmodel', model: 'GLM-5.3' }, usage)
+  tracker.record({ provider: 'zcode-zai', model: 'GLM-5.3' }, usage)
+  const snapshot = tracker.snapshot()
+  assert.equal(snapshot.models.length, 2)
+  assert.deepEqual(snapshot.models.map(item => item.provider).sort(), ['zcode-bigmodel', 'zcode-zai'])
+  assert.equal(snapshot.totals.total, 36)
 })
