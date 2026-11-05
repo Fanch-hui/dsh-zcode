@@ -1,7 +1,7 @@
 {
   "name": "dsh-zcode",
   "version": "0.2.0",
-  "description": "DeepSeek Harness adapter for the zcode-api proxy",
+  "description": "为 DeepSeek Harness 提供 ZCode 登录与使用界面",
   "type": "module",
   "license": "Apache-2.0 AND CC-BY-NC-SA-4.0",
   "main": "./lib/index.js",
