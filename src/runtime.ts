@@ -3,7 +3,7 @@ import type { AuthPort, AccountStatus, ModelRoute, Plan, Platform, QuotaSnapshot
 import type { Settings } from './config.js'
 import type { ControlOperations, KeyInput, ZCodeStatus } from './control/types.js'
 import { AuthError } from './auth/http.js'
-import { MODELS, PROVIDERS, providerFor, resolveModel } from './provider/catalog.js'
+import { modelsForProvider, PROVIDERS, providerFor, resolveModel } from './provider/catalog.js'
 import { TokenUsageTracker } from './usage.js'
 
 interface QuotaView { scope: string; generation: number; snapshot?: QuotaSnapshot; errorCode?: string }
@@ -27,7 +27,7 @@ export class ZCodeRuntime implements ControlOperations {
     const settings = this.settings()
     return {
       accounts, settings, usage: this.usage.snapshot(),
-      models: PROVIDERS.flatMap(provider => MODELS.map(id => {
+      models: PROVIDERS.flatMap(provider => modelsForProvider(provider).map(id => {
         const model = resolveModel(provider, id, settings)
         return { provider, id, name: model.name }
       })),

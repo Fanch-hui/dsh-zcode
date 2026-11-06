@@ -3,6 +3,7 @@ import {
   type AssistantMessage, type ContentBlock, type GenerateOptions, type ImageAttachmentAccessResolver,
 } from '@deepseek-ai/dsh-llm'
 import { replayBlocks } from './replay.js'
+import { modelDefinition, type ModelEffort } from '../provider/models.js'
 import type { ProtocolContext, ResolveImage, WireObject } from './types.js'
 
 interface WireMessage { role: 'user' | 'assistant'; content: WireObject[] }
@@ -104,12 +105,13 @@ export async function buildRequest(
   if (options.provider !== context.provider || options.model !== context.model) {
     return unsupported('模型调用上下文已变更。', 'INVALID_REQUEST')
   }
-  const maxTokens = options.maxTokens ?? context.defaultMaxTokens ?? 32000
-  if (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > 128000) {
-    return unsupported('输出上限必须为 1 到 128000 的整数。', 'UNSUPPORTED_OPTION')
+  const model = modelDefinition(options.model)
+  const maxTokens = options.maxTokens ?? Math.min(context.defaultMaxTokens ?? 32000, model.maxTokens)
+  if (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > model.maxTokens) {
+    return unsupported(`输出上限必须为 1 到 ${model.maxTokens} 的整数。`, 'UNSUPPORTED_OPTION')
   }
   const effort = options.reasoningEffort ?? context.defaultEffort ?? 'high'
-  if (effort !== 'low' && effort !== 'high' && effort !== 'max') {
+  if (!model.efforts.includes(effort as ModelEffort)) {
     return unsupported('所选思考强度不可用。', 'UNSUPPORTED_OPTION')
   }
   if (options.temperature !== undefined && (!Number.isFinite(options.temperature) || options.temperature < 0 || options.temperature > 1)) {
@@ -144,7 +146,8 @@ export async function buildRequest(
   validateTools(messages)
   return {
     model: options.model, max_tokens: maxTokens, messages, stream: true,
-    thinking: { type: 'enabled' }, output_config: { effort },
+    thinking: { type: effort === 'off' ? 'disabled' : 'enabled' },
+    ...(model.reasoning !== 'toggle' && effort !== 'off' ? { output_config: { effort } } : {}),
     ...(system.length ? { system: system.join('\n\n') } : {}),
     ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
     ...(options.stop === undefined ? {} : { stop_sequences: options.stop }),

@@ -1,4 +1,4 @@
-import type { ImageBlock } from '@deepseek-ai/dsh-llm'
+import type { ImageBlock, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Plan } from '../types.js'
 
 export interface ProtocolContext {
@@ -7,7 +7,7 @@ export interface ProtocolContext {
   scope: string
   plan?: Plan
   defaultMaxTokens?: number
-  defaultEffort?: 'low' | 'high' | 'max'
+  defaultEffort?: ReasoningEffortId
 }
 
 /** Resolve a DSH-projected image into a data URL using the attachment service. */

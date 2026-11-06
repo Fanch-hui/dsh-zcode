@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { LlmError, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { LlmError, ReasoningEffortId, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { ZCodeAdapter } from '../src/provider/adapter.js'
 import type { Settings } from '../src/config.js'
 import type { AccountSnapshot, AccountState, AuthPort, Plan, Platform, RequestCredential } from '../src/types.js'
@@ -76,6 +76,51 @@ test('Start Plan selects its own proxy and remains usable when Coding Plan quota
     assert.equal(requests, 1)
     assert.equal((await account.status('zai')).state, 'quota_exhausted')
     assert.equal((await account.status('zai', 'start-plan')).state, 'ready')
+  } finally { adapter.dispose(); account.dispose() }
+})
+
+test('Start Plan applies the selected model capabilities and preserves the existing 5.3 route', async () => {
+  const account = new TestAuth()
+  const bodies: Record<string, unknown>[] = []
+  const adapter = new ZCodeAdapter({ auth: account, settings: () => ({ ...settings, maxTokens: 128000, effort: 'low' }),
+    fetch: async (_url, init) => { bodies.push(JSON.parse(String(init?.body))); return answer() } })
+  try {
+    const glm52 = await adapter.resolveModel(options.provider, 'GLM-5.2')
+    assert.deepEqual(glm52.inputModalities, ['text'])
+    assert.equal(glm52.context?.contextWindow, 1_000_000)
+    assert.equal(glm52.defaultMaxTokens, 128000)
+    assert.deepEqual(glm52.reasoning?.efforts.map(item => item.id), ['off', 'high', 'max'])
+    assert.equal(glm52.reasoning?.defaultEffort, 'high')
+    const turbo = await adapter.resolveModel(options.provider, 'GLM-5-Turbo')
+    assert.deepEqual(turbo.inputModalities, ['text'])
+    assert.equal(turbo.context?.contextWindow, 200_000)
+    assert.equal(turbo.defaultMaxTokens, 64000)
+    assert.deepEqual(turbo.reasoning?.efforts.map(item => item.id), ['off', 'high'])
+    assert.equal(turbo.reasoning?.defaultEffort, 'high')
+
+    for (const [model, effort, maxTokens, thinking, output] of [
+      ['GLM-5.2', 'off', 128000, 'disabled', undefined],
+      ['GLM-5.2', 'high', 128000, 'enabled', { effort: 'high' }],
+      ['GLM-5.2', 'max', 128000, 'enabled', { effort: 'max' }],
+      ['GLM-5-Turbo', 'off', 64000, 'disabled', undefined],
+      ['GLM-5-Turbo', 'high', 64000, 'enabled', undefined],
+      ['GLM-5.3', 'low', 128000, 'enabled', { effort: 'low' }],
+    ] as const) {
+      await collect(adapter.stream({ ...options, model, reasoningEffort: ReasoningEffortId(effort), maxTokens }))
+      const body = bodies.at(-1)!
+      assert.equal(body.model, model)
+      assert.equal(body.max_tokens, maxTokens)
+      assert.deepEqual(body.thinking, { type: thinking })
+      assert.deepEqual(body.output_config, output)
+    }
+    await collect(adapter.stream({ ...options, model: 'GLM-5-Turbo' }))
+    assert.equal(bodies.at(-1)?.max_tokens, 64000)
+    assert.deepEqual(bodies.at(-1)?.thinking, { type: 'enabled' })
+    await assert.rejects(collect(adapter.stream({ ...options, model: 'GLM-5-Turbo', maxTokens: 64001 })),
+      (error: unknown) => error instanceof LlmError && error.code === 'UNSUPPORTED_OPTION')
+    await assert.rejects(collect(adapter.stream({ ...options, model: 'GLM-5.2', reasoningEffort: ReasoningEffortId('low') })),
+      (error: unknown) => error instanceof LlmError && error.code === 'UNSUPPORTED_OPTION')
+    assert.equal(bodies.length, 7)
   } finally { adapter.dispose(); account.dispose() }
 })
 

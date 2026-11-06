@@ -8,7 +8,7 @@ import type { AccountSnapshot, AuthPort, ModelRoute, RequestCredential } from '.
 import { buildRequest, parseStream, type ResolveImage } from '../protocol/index.js'
 import { RequestScheduler } from '../transport/scheduler.js'
 import { httpFailure, retryAfter } from '../transport/http.js'
-import { MODELS, platformFor, planFor, providerName, resolveModel } from './catalog.js'
+import { modelsForProvider, platformFor, planFor, providerName, resolveModel } from './catalog.js'
 import { startPlanResponseFailure } from '../transport/start-plan.js'
 import { upstreamSession } from './session.js'
 import { providerFailure } from './errors.js'
@@ -48,7 +48,7 @@ export class ZCodeAdapter extends LlmAdapter {
 
   override async listModels(provider: string) {
     const settings = this.dependencies.settings()
-    return MODELS.map(model => resolveModel(provider, model, settings))
+    return modelsForProvider(provider).map(model => resolveModel(provider, model, settings))
   }
 
   override async resolveModel(provider: string, model: string, signal?: AbortSignal) {
@@ -115,7 +115,7 @@ export class ZCodeAdapter extends LlmAdapter {
       const context = {
         provider: options.provider, model: options.model, scope: account.scope,
         plan: account.plan,
-        defaultMaxTokens: settings.maxTokens, defaultEffort: settings.effort,
+        defaultMaxTokens: model.defaultMaxTokens, defaultEffort: model.reasoning?.defaultEffort,
       }
       const messages = model.inputModalities?.includes('image')
         ? options.messages : [...projectImagesForTextModel(options.messages)]
