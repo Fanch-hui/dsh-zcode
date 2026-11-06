@@ -29,8 +29,12 @@ npm 安装的 DSH 可将 profile 改为 `web`。桌面版也可通过插件管�
 | --- | --- | --- | --- | --- |
 | GLM-5.3 | 文本 | 1,000,000 | 128,000 | low / high / max |
 | GLM-5.3-Flash | 文本、图片 | 1,000,000 | 128,000 | low / high / max |
+| GLM-5.2 | 文本 | 1,000,000 | 128,000 | off / high / max |
+| GLM-5-Turbo | 文本 | 200,000 | 64,000 | 关闭 / 开启 |
 
 四个 provider 分别为 `zcode-bigmodel`、`zcode-zai`、`zcode-bigmodel-start-plan`、`zcode-zai-start-plan`。套餐和模型选择决定使用的通道，平台返回额度或权限错误时展示相应状态。
+
+Coding Plan 目录提供 GLM-5.3 和 GLM-5.3-Flash；Start Plan 目录提供 GLM-5.3-Flash、GLM-5.2、GLM-5-Turbo 和 GLM-5.3。每个模型单独提供可选思考档位，输出设置按模型上限生效。
 
 额度查询调用代理核心的 `collectQuotaSnapshot`。Start Plan 展示模型余额桶，Coding Plan 展示套餐窗口；查询缓存 60 秒，手动刷新获取最新数据。Token 统计按 DSH 的输入、缓存读取、缓存写入和输出口径转换。
 
