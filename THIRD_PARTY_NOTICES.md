@@ -27,7 +27,10 @@ The source snapshot and integration source accompany the package. Attribution an
 - Reference commit: `a9fe401eede6e6e5e01be9048679c206fe6f02d9` (v3.17.2).
 - License: Apache-2.0.
 - Reference: `config/provider/zcode-builtin.json`, revision 43, for DSH model capability declarations.
+- License text: `licenses/Apache-2.0.txt`.
 
 ## DSH adapter and runtime dependencies
 
-The DSH adapter source in `src` is licensed under Apache-2.0. Undici and Zod retain their MIT licenses; YAML retains its ISC license. Their packages include the respective license files. Development tools retain their upstream licenses.
+The DSH adapter source in `src`, its UI, tests, documentation, and build tooling are licensed under MIT, as provided in the root `LICENSE`. The upstream proxy and its adaptations in `vendor/zcode-api` and `integration` retain CC-BY-NC-SA-4.0, including its NonCommercial and ShareAlike terms. The distributed package therefore declares `MIT AND CC-BY-NC-SA-4.0`.
+
+Undici and Zod retain their MIT licenses; YAML retains its ISC license. Their packages include the respective license files. Development tools retain their upstream licenses.

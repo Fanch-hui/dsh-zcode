@@ -5,3 +5,4 @@ lib/
 coverage/
 .local/
 AGENTS.md
+.workbuddy-ai/

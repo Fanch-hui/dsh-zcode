@@ -1,6 +1,6 @@
 # DSH ZCode
 
-在 DeepSeek Harness 中使用 BigModel、Z.AI 的 Coding Plan 与 Start Plan 模型。
+将 ZCode 订阅通过反向代理接入 DeepSeek Harness，支持 BigModel、Z.AI 的 Coding Plan 与 Start Plan 模型。
 
 本插件提供连接与使用界面：
 
@@ -9,6 +9,6 @@
 - 插件设置可调整默认平台、套餐、并发数、输出上限、请求超时和思考强度。
 - 「Token 统计」按每个套餐下的每个模型分别显示累计的输入、输出、缓存读取 token 与缓存命中率。
 
-安装、CLI、headless 与开发说明见仓库 `docs/usage.md`，不随插件包分发。
+安装包见 [GitHub Releases](https://github.com/Fanch-hui/dsh-zcode/releases)，安装、CLI、headless 与开发说明见仓库 [docs/usage.md](https://github.com/Fanch-hui/dsh-zcode/blob/main/docs/usage.md)。
 
-插件随包携带 [TriDefender/zcode-api](https://github.com/TriDefender/zcode-api) 固定版本 `4.8.8.android` 的代理核心。DSH 适配源码采用 Apache-2.0；随包分发的核心及其派生部分遵循 CC-BY-NC-SA-4.0，详见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+DSH 适配源码采用 [MIT](./LICENSE)。插件随包携带 [TriDefender/zcode-api](https://github.com/TriDefender/zcode-api) 固定版本 `4.8.8.android` 的代理核心；该核心与其派生部分使用 CC-BY-NC-SA-4.0，包含非商业与相同许可要求，详见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
