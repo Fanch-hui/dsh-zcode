@@ -11,10 +11,16 @@
 开发基线为 DSH **0.2.2-rc.1**，兼容范围 `>=0.2.2-alpha.3 <0.3.0`，Node **24.9.0 及以上**。桌面版使用应用附带的 Node。
 
 ```bash
-dsh plugin --profile desktop add ./dsh-zcode-0.2.1.tgz
+dsh plugin --profile desktop add dsh-zcode@0.2.1
 ```
 
-从 [GitHub Releases](https://github.com/Fanch-hui/dsh-zcode/releases) 下载 `.tgz` 安装包。npm 安装的 DSH 可将 profile 改为 `web`。桌面版也可通过插件管理添加本地 `.tgz`。
+此命令从 [npm](https://www.npmjs.com/package/dsh-zcode) 安装插件。npm 安装的 DSH 可将 profile 改为 `web`。
+
+也可从 [GitHub Releases](https://github.com/Fanch-hui/dsh-zcode/releases) 下载 `.tgz` 安装包，通过桌面版插件管理添加本地文件，或执行：
+
+```bash
+dsh plugin --profile desktop add ./dsh-zcode-0.2.1.tgz
+```
 
 1. 打开「插件 → ZCode」，选择平台及套餐。
 2. 点击「登录」，在官方网页完成授权。既有插件登录记录会在首次使用时交由代理核心解析。
