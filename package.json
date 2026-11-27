@@ -1,6 +1,6 @@
 {
   "name": "dsh-zcode",
-  "version": "0.2.1",
+  "version": "0.2.1-i18n.0",
   "description": "将 ZCode 订阅反代接入 DeepSeek Harness 的插件，支持 Z.AI / BigModel 与 Coding Plan / Start Plan",
   "type": "module",
   "license": "MIT AND CC-BY-NC-SA-4.0",
