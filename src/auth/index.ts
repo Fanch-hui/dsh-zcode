@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto'
+import { t } from '../i18n/index.js'
 import type { AccountSnapshot, AccountState, AccountStatus, AuthPort, LoginAttempt, Plan, Platform, QuotaSnapshot, RequestCredential } from '../types.js'
 import type { UpstreamCredential, UpstreamPort } from '../proxy/types.js'
 import { AuthError, waitFor } from './http.js'
@@ -448,7 +449,7 @@ export class ZcodeAuth implements AuthPort {
   }
 
   private applyQuotaState(slot: Slot, quota: QuotaSnapshot): void {
-    const measured = quota.windows.filter(window => (window.name === 'Token' || window.name === '积分') &&
+    const measured = quota.windows.filter(window => (window.name === t('quota.windowToken') || window.name === t('quota.windowCredit')) &&
       (window.remaining !== undefined || window.usedPercent !== undefined))
     const exhausted = measured.some(window => window.remaining === 0 || window.usedPercent === 100)
     if (exhausted) {

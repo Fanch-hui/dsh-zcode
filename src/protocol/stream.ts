@@ -1,4 +1,5 @@
 import { LlmError } from '@deepseek-ai/dsh-llm'
+import { t } from '../i18n/index.js'
 import type { ContentBlock, FinishReason, StreamChunk, TokenUsage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { startPlanBusinessFailure } from '../transport/start-plan.js'
 import { fingerprint, replayEnvelope, type ReplayBlock } from './replay.js'
@@ -15,7 +16,7 @@ interface BlockState {
 }
 type Counts = Partial<TokenUsage>
 
-function invalid(): never { throw new LlmError('模型返回的流事件不完整或格式无效。', 'ZCODE_INVALID_STREAM') }
+function invalid(): never { throw new LlmError(t('stream.invalid'), 'ZCODE_INVALID_STREAM') }
 function object(value: unknown): WireObject {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid()
   return value as WireObject
@@ -119,14 +120,14 @@ function stopReason(value: unknown): FinishReason {
 }
 
 function inBandError(event: WireObject, observed: boolean): FinishReason {
-  if (observed) return { kind: 'error', failure: { code: 'ZCODE_STREAM_INTERRUPTED', message: '模型输出中断，请重试。' } }
+  if (observed) return { kind: 'error', failure: { code: 'ZCODE_STREAM_INTERRUPTED', message: t('stream.interrupted') } }
   const type = object(event.error).type
   const codes: Record<string, string> = {
     authentication_error: 'AUTH', permission_error: 'PERMISSION', rate_limit_error: 'RATE_LIMIT',
     invalid_request_error: 'INVALID_REQUEST', api_error: 'SERVER', overloaded_error: 'SERVER',
   }
   const code = typeof type === 'string' ? codes[type] ?? 'ZCODE_STREAM_ERROR' : 'ZCODE_STREAM_ERROR'
-  return { kind: 'error', failure: { code, message: '模型服务返回错误，请检查连接后重试。' } }
+  return { kind: 'error', failure: { code, message: t('stream.serviceError') } }
 }
 
 function startPlanError(event: WireObject, observed: boolean): FinishReason | undefined {
@@ -138,7 +139,7 @@ function startPlanError(event: WireObject, observed: boolean): FinishReason | un
   if (event.type !== 'error' || (event.error && typeof event.error === 'object' && !Array.isArray(event.error))) return undefined
   return { kind: 'error', failure: {
     code: observed ? 'ZCODE_STREAM_INTERRUPTED' : 'ZCODE_STREAM_ERROR',
-    message: observed ? '模型输出中断，请重试。' : 'Start Plan 服务返回错误，请检查连接后重试。',
+    message: observed ? t('stream.interrupted') : t('stream.startPlanError'),
   } }
 }
 
@@ -220,7 +221,7 @@ export async function* parseStream(
     }
   }
   signal?.throwIfAborted()
-  if (!stopped || !reason) throw new LlmError('模型流在结束前断开，请重试。', 'ZCODE_STREAM_INTERRUPTED')
+  if (!stopped || !reason) throw new LlmError(t('stream.disconnected'), 'ZCODE_STREAM_INTERRUPTED')
   const usage = finalUsage(counts)
   if (usage) yield { type: 'usage', usage }
   const metadata: ReplayBlock[] = [...blocks.values()].map(block => ({

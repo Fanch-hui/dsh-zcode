@@ -3,6 +3,8 @@ import test from 'node:test'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { buildRequest, parseStream, type ProtocolContext } from '../src/protocol/index.js'
 
+process.env.ZCODE_LOCALE = 'zh'
+
 const context: ProtocolContext = { provider: 'zcode-bigmodel', model: 'GLM-5.3', scope: 'account-scope' }
 const wire = (value: unknown) => `data: ${JSON.stringify(value)}\n\n`
 const text = (value: string) => ({ type: 'text', text: value })

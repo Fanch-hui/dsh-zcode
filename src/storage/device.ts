@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { t } from '../i18n/index.js'
 import { link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -9,7 +10,7 @@ function missing(error: unknown, code: string): boolean {
 async function readIdentity(file: string): Promise<string> {
   const identity = (await readFile(file, 'utf8')).trim()
   if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(identity)) {
-    throw new Error('ZCode 设备身份文件格式无效。')
+    throw new Error(t('device.invalid'))
   }
   return identity
 }

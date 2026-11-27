@@ -1,4 +1,5 @@
 import type { Plan, QuotaSnapshot, QuotaWindow } from '../types.js'
+import { t } from '../i18n/index.js'
 import { AuthError, number, object, string } from './http.js'
 
 function timestamp(value: unknown): number | undefined {
@@ -26,7 +27,7 @@ function balanceWindow(value: unknown): QuotaWindow | undefined {
 function codingWindow(value: unknown): QuotaWindow | undefined {
   const item = object(value)
   const type = string(item?.type)
-  const names: Record<string, string> = { TOKENS_LIMIT: 'Token', CREDIT_LIMIT: '积分', TIME_LIMIT: '工具调用' }
+  const names: Record<string, string> = { TOKENS_LIMIT: t('quota.windowToken'), CREDIT_LIMIT: t('quota.windowCredit'), TIME_LIMIT: t('quota.windowToolCalls') }
   const name = type ? names[type] : undefined
   if (!name) return undefined
   const remaining = number(item?.remaining)

@@ -14,6 +14,8 @@ import { parseArgs, runCli } from '../src/cli/commands.js'
 import { DshCredentialStore } from '../src/storage/credentials.js'
 import type { UpstreamPort } from '../src/proxy/types.js'
 
+process.env.ZCODE_LOCALE = 'zh'
+
 async function fixture(rpc: (method: string, params?: unknown, signal?: AbortSignal) => Promise<unknown>) {
   const home = await mkdtemp(join(tmpdir(), 'dsh-zcode-cli-test-'))
   const ctx = new Context()

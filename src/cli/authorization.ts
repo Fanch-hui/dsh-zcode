@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { t } from '../i18n/index.js'
 import type { AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { AuthPort, Platform } from '../types.js'
@@ -9,11 +10,11 @@ export function registerAuthorizationFlows(ctx: Context, auth: AuthPort): () => 
   const register = (platform: Platform, label: string) => ctx.authorization.registerFlow({
     key: credentialKey('llm-zcode', platform),
     label,
-    methods: [{ id: 'oauth', label: '浏览器授权' }],
+    methods: [{ id: 'oauth', label: t('cli.authMethod') }],
     async run(session: AuthorizationSession) {
-      await login(auth, platform, session.signal, url => session.notify({ message: '请在浏览器完成授权。', url }))
+      await login(auth, platform, session.signal, url => session.notify({ message: t('cli.authNotify'), url }))
     },
   })
-  const disposers = [register('bigmodel', 'ZCode · 智谱'), register('zai', 'ZCode · Z.AI')]
+  const disposers = [register('bigmodel', `ZCode · ${t('platform.bigmodelShort')}`), register('zai', `ZCode · ${t('platform.zai')}`)]
   return () => { for (const dispose of disposers) dispose() }
 }

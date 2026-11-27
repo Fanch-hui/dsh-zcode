@@ -1,4 +1,5 @@
 import { LlmError, ReasoningEffortId, type LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
+import { t } from '../i18n/index.js'
 import type { Settings } from '../config.js'
 import type { Plan, Platform } from '../types.js'
 import { PROVIDER_DEFINITIONS } from './identity.js'
@@ -6,11 +7,10 @@ import { modelDefinition, modelsForPlan } from './models.js'
 
 export { providerFor } from './identity.js'
 export const PROVIDERS = PROVIDER_DEFINITIONS.map(provider => provider.id)
-const effortNames = { off: '关闭', low: '低', high: '高', max: '最高' }
 
 function providerDefinition(provider: string) {
   const found = PROVIDER_DEFINITIONS.find(entry => entry.id === provider)
-  if (!found) throw new LlmError('未知的 ZCode 平台。', 'NO_ADAPTER')
+  if (!found) throw new LlmError(t('catalog.unknownPlatform'), 'NO_ADAPTER')
   return found
 }
 
@@ -21,6 +21,7 @@ export function modelsForProvider(provider: string): readonly string[] { return 
 
 export function resolveModel(provider: string, model: string, settings: Settings): LlmResolvedModelInfo {
   platformFor(provider)
+  const effortNames = { off: t('effort.off'), low: t('effort.low'), high: t('effort.high'), max: t('effort.max') }
   const info = modelDefinition(model)
   const defaultEffort = info.efforts.includes(settings.effort) ? settings.effort : 'high'
   return {
@@ -29,7 +30,7 @@ export function resolveModel(provider: string, model: string, settings: Settings
     context: { contextWindow: info.contextWindow }, defaultMaxTokens: Math.min(settings.maxTokens, info.maxTokens),
     reasoning: {
       efforts: info.efforts.map(effort => ({ id: ReasoningEffortId(effort),
-        name: info.reasoning === 'toggle' && effort === 'high' ? '开启' : effortNames[effort] })),
+        name: info.reasoning === 'toggle' && effort === 'high' ? t('effort.on') : effortNames[effort] })),
       defaultEffort: ReasoningEffortId(defaultEffort),
     },
   }
