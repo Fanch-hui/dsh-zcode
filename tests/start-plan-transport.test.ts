@@ -4,6 +4,8 @@ import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import { parseStream, type ProtocolContext } from '../src/protocol/index.js'
 import { startPlanBusinessFailure, startPlanResponseFailure } from '../src/transport/start-plan.js'
 
+process.env.ZCODE_LOCALE = 'zh'
+
 const context: ProtocolContext = {
   provider: 'zcode-zai-start-plan', model: 'GLM-5.3', scope: 'fixture-account', plan: 'start-plan',
 }

@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { t } from './i18n/index.js'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-typert-registry'
@@ -39,7 +40,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.on('credentials/record-updated', key => {
     const platform = key === 'llm-zcode/bigmodel' ? 'bigmodel' : key === 'llm-zcode/zai' ? 'zai' : undefined
     if (platform) void auth.reconcile(platform).catch(() => {
-      ctx.logger.warn('ZCode 凭据同步失败，请重新读取连接状态。')
+      ctx.logger.warn(t('host.credentialSyncFailed'))
     })
   })
   const registration = ctx.llm.registerAdapter([...PROVIDERS], adapter)

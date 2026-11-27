@@ -1,4 +1,5 @@
 import type { AuthPort, Plan, Platform, QuotaSnapshot } from '../types.js'
+import { t } from '../i18n/index.js'
 import { accountState, login } from './login.js'
 
 type CliAction = 'login' | 'status' | 'quota' | 'disconnect' | 'help'
@@ -6,7 +7,6 @@ export interface CliArgs { action: CliAction; platform: Platform; plan?: Plan; h
 export interface CliIO { out(value: string): void; error(value: string): void }
 export interface CliEnvironment { auth: AuthPort; close(): Promise<void> }
 
-const USAGE = '用法：dsh-zcode <login|status|quota|disconnect> [--platform bigmodel|zai] [--plan coding-plan|start-plan] [--home DSH目录]'
 
 export function parseArgs(args: readonly string[]): CliArgs {
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') return { action: 'help', platform: 'bigmodel' }
@@ -33,14 +33,14 @@ export function parseArgs(args: readonly string[]): CliArgs {
 }
 
 function quotaText(quota: QuotaSnapshot): string {
-  if (quota.unavailable || quota.windows.length === 0) return '平台暂未提供用量信息。'
+  if (quota.unavailable || quota.windows.length === 0) return t('quota.unavailable')
   const windows = quota.windows.map(item => {
-    const amount = item.remaining !== undefined ? `剩余 ${item.remaining}${item.limit !== undefined ? ` / ${item.limit}` : ''}`
-      : item.usedPercent !== undefined ? `已用 ${item.usedPercent}%` : '未提供'
-    const reset = item.resetsAt === undefined ? '' : `，重置于 ${new Date(item.resetsAt).toLocaleString()}`
+    const amount = item.remaining !== undefined ? t('quota.remaining', { value: `${item.remaining}${item.limit !== undefined ? ` / ${item.limit}` : ''}` })
+      : item.usedPercent !== undefined ? t('quota.used', { value: item.usedPercent }) : t('quota.notProvided')
+    const reset = item.resetsAt === undefined ? '' : t('quota.cliReset', { date: new Date(item.resetsAt).toLocaleString() })
     return `${item.name}：${amount}${reset}`
   })
-  return [...windows, `更新于 ${new Date(quota.updatedAt).toLocaleString()}`].join('\n')
+  return [...windows, t('quota.updatedAt', { date: new Date(quota.updatedAt).toLocaleString() })].join('\n')
 }
 
 export async function runCli(
@@ -49,8 +49,8 @@ export async function runCli(
 ): Promise<number> {
   let command: CliArgs
   try { command = parseArgs(args) }
-  catch { io.error(USAGE); return 2 }
-  if (command.action === 'help') { io.out(USAGE); return 0 }
+  catch { io.error(t('cli.usage')); return 2 }
+  if (command.action === 'help') { io.out(t('cli.usage')); return 0 }
   let environment: CliEnvironment | undefined
   try {
     signal.throwIfAborted()
@@ -58,8 +58,8 @@ export async function runCli(
     signal.throwIfAborted()
     const { auth } = environment
     if (command.action === 'login') {
-      await login(auth, command.platform, signal, url => io.out(`请在浏览器打开授权地址：\n${url}\n按 Ctrl+C 取消登录。`))
-      io.out('登录成功。')
+      await login(auth, command.platform, signal, url => io.out(t('cli.loginPrompt', { url })))
+      io.out(t('cli.loginSuccess'))
     } else if (command.action === 'status') {
       io.out(accountState(await auth.status(command.platform, command.plan)))
     } else if (command.action === 'quota') {
@@ -67,12 +67,12 @@ export async function runCli(
       io.out(quotaText(await auth.queryQuota(account, signal, true)))
     } else {
       await auth.disconnect(command.platform)
-      io.out('已断开连接。')
+      io.out(t('cli.disconnected'))
     }
     return 0
   } catch {
-    if (signal.aborted) { io.error('操作已取消。'); return 130 }
-    io.error('ZCode 操作未完成，请检查连接、授权和套餐状态。')
+    if (signal.aborted) { io.error(t('cli.cancelled')); return 130 }
+    io.error(t('cli.failed'))
     return 1
   } finally {
     await environment?.close()

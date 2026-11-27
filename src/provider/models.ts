@@ -1,4 +1,5 @@
 import { LlmError } from '@deepseek-ai/dsh-llm'
+import { t } from '../i18n/index.js'
 import type { Plan } from '../types.js'
 
 export type ModelEffort = 'off' | 'low' | 'high' | 'max'
@@ -33,6 +34,6 @@ export function modelsForPlan(plan: Plan): readonly string[] { return discovered
 
 export function modelDefinition(id: string): ModelDefinition {
   const model = models.find(item => item.id.toLowerCase() === id.toLowerCase())
-  if (!model) throw new LlmError('所选模型未列入当前插件目录，请刷新模型目录。', 'MODEL_NOT_FOUND')
+  if (!model) throw new LlmError(t('models.notFound'), 'MODEL_NOT_FOUND')
   return model
 }

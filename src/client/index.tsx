@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { t } from '../i18n/index.js'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -19,6 +20,6 @@ export async function apply(ctx: Context): Promise<void> {
     }, () => <Settings controller={controller} />))
     ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
       name: 'plugins.row.config', key: 'dsh-zcode#llm-zcode',
-    }, ({ view, form }) => view === 'summary' ? 'ZCode 高级设置' : <Advanced form={form} />))
+    }, ({ view, form }) => view === 'summary' ? t('client.advancedTitle') : <Advanced form={form} />))
   })
 }

@@ -1,4 +1,5 @@
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import { t } from '../i18n/index.js'
 import type { Plan, Platform } from '../types.js'
 import type { ControlOperations, KeyInput, ZCodeStatus } from '../control/types.js'
 
@@ -49,9 +50,9 @@ export class ZCodeController {
         if (this.disposed || generation !== this.generation) return
         this.update(result.ok
           ? { ...this.value, status: result.value, error: undefined }
-          : { ...this.value, error: '读取连接状态失败，请重试。' })
+          : { ...this.value, error: t('client.statusError') })
       } catch {
-        if (!this.disposed && generation === this.generation) this.update({ ...this.value, error: '连接 DSH 服务失败，请重试。' })
+        if (!this.disposed && generation === this.generation) this.update({ ...this.value, error: t('client.connectError') })
       } finally {
         this.read = undefined
         if (!this.disposed) {
@@ -97,7 +98,7 @@ export class ZCodeController {
       if (this.disposed || generation !== this.generation) return false
       this.pendingPlatform = undefined
       if (!result.ok) {
-        this.update({ ...this.value, pending: undefined, error: '操作未完成，请检查连接后重试。' })
+        this.update({ ...this.value, pending: undefined, error: t('client.actionError') })
         return false
       }
       this.update({ ...this.value, status: result.value, pending: undefined, error: undefined })
@@ -105,7 +106,7 @@ export class ZCodeController {
     } catch {
       if (!this.disposed && generation === this.generation) {
         this.pendingPlatform = undefined
-        this.update({ ...this.value, pending: undefined, error: '连接 DSH 服务失败，请重试。' })
+        this.update({ ...this.value, pending: undefined, error: t('client.connectError') })
       }
       return false
     } finally { this.schedule() }

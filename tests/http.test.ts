@@ -3,6 +3,8 @@ import test from 'node:test'
 import { httpFailure } from '../src/transport/http.js'
 import type { AccountSnapshot, AuthPort, RequestCredential } from '../src/types.js'
 
+process.env.ZCODE_LOCALE = 'zh'
+
 const account: AccountSnapshot = {
   platform: 'zai', scope: 'fixture-account', generation: 1,
   mode: 'oauth', signal: new AbortController().signal,

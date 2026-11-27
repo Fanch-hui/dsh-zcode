@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { t } from '../i18n/index.js'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigPageForm } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 
@@ -15,8 +16,8 @@ function toDraft(value: Record<string, unknown>): Draft {
 }
 
 export function Advanced({ form }: { form?: ConfigPageForm }) {
-  if (!form || form.state.status === 'loading') return <p role="status">正在读取配置…</p>
-  if (form.state.status !== 'ready' || !form.state.value) return <p role="status">当前配置不可用。</p>
+  if (!form || form.state.status === 'loading') return <p role="status">{t('advanced.loading')}</p>
+  if (form.state.status !== 'ready' || !form.state.value) return <p role="status">{t('advanced.unavailable')}</p>
   return <AdvancedFields form={form} />
 }
 
@@ -40,7 +41,7 @@ function AdvancedFields({ form }: { form: ConfigPageForm }) {
     if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8 ||
       !Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > 128000 ||
       !Number.isInteger(timeoutMs) || timeoutMs < 10000 || timeoutMs > 1800000) {
-      setMessage('请输入有效的并发数、输出上限和超时时间。')
+      setMessage(t('advanced.invalidInput'))
       return
     }
     setSaving(true)
@@ -53,23 +54,23 @@ function AdvancedFields({ form }: { form: ConfigPageForm }) {
         { op: 'set', path: ['timeoutMs'], value: timeoutMs },
         { op: 'set', path: ['effort'], value: draft.effort },
       ], revision)
-      if (!accepted) { setMessage('配置未保存。请检查其他位置的更改，放弃当前修改后重试。'); return }
+      if (!accepted) { setMessage(t('advanced.conflict')); return }
       setDirty(false)
-      setMessage('配置已保存。')
-    } catch { setMessage('保存失败，请检查连接后重试。') }
+      setMessage(t('advanced.saved'))
+    } catch { setMessage(t('advanced.saveFailed')) }
     finally { setSaving(false) }
   }
   const disabled = !form.state.writable || saving
-  return <form onSubmit={event => { event.preventDefault(); void save() }} aria-label="ZCode 高级设置" style={{ maxWidth: 520, display: 'grid', gap: 16, fontSize: 14 }}>
-    <Field label="默认平台"><select style={control} value={draft.platform} disabled={disabled} onChange={event => edit('platform', event.target.value)}><option value="bigmodel">智谱 BigModel</option><option value="zai">Z.AI</option></select></Field>
-    <Field label="默认套餐"><select style={control} value={draft.plan} disabled={disabled} onChange={event => edit('plan', event.target.value)}><option value="coding-plan">Coding Plan</option><option value="start-plan">Start Plan</option></select></Field>
-    <Field label="并发请求数"><input style={control} type="number" min="1" max="8" step="1" value={draft.concurrency} disabled={disabled} onChange={event => edit('concurrency', event.target.value)} /></Field>
-    <Field label="单次输出上限"><input style={control} type="number" min="1" max="128000" step="1" value={draft.maxTokens} disabled={disabled} onChange={event => edit('maxTokens', event.target.value)} /></Field>
-    <Field label="请求超时（毫秒）"><input style={control} type="number" min="10000" max="1800000" step="1000" value={draft.timeoutMs} disabled={disabled} onChange={event => edit('timeoutMs', event.target.value)} /></Field>
-    <Field label="思考强度"><select style={control} value={draft.effort} disabled={disabled} onChange={event => edit('effort', event.target.value)}><option value="low">低</option><option value="high">高</option><option value="max">最高</option></select></Field>
-    {!form.state.writable && <span role="status">当前配置为只读。</span>}
+  return <form onSubmit={event => { event.preventDefault(); void save() }} aria-label={t('client.advancedTitle')} style={{ maxWidth: 520, display: 'grid', gap: 16, fontSize: 14 }}>
+    <Field label={t('advanced.defaultPlatform')}><select style={control} value={draft.platform} disabled={disabled} onChange={event => edit('platform', event.target.value)}><option value="bigmodel">{t('platform.bigmodel')}</option><option value="zai">Z.AI</option></select></Field>
+    <Field label={t('advanced.defaultPlan')}><select style={control} value={draft.plan} disabled={disabled} onChange={event => edit('plan', event.target.value)}><option value="coding-plan">Coding Plan</option><option value="start-plan">Start Plan</option></select></Field>
+    <Field label={t('advanced.concurrency')}><input style={control} type="number" min="1" max="8" step="1" value={draft.concurrency} disabled={disabled} onChange={event => edit('concurrency', event.target.value)} /></Field>
+    <Field label={t('advanced.maxTokens')}><input style={control} type="number" min="1" max="128000" step="1" value={draft.maxTokens} disabled={disabled} onChange={event => edit('maxTokens', event.target.value)} /></Field>
+    <Field label={t('advanced.timeout')}><input style={control} type="number" min="10000" max="1800000" step="1000" value={draft.timeoutMs} disabled={disabled} onChange={event => edit('timeoutMs', event.target.value)} /></Field>
+    <Field label={t('advanced.effort')}><select style={control} value={draft.effort} disabled={disabled} onChange={event => edit('effort', event.target.value)}><option value="low">{t('effort.low')}</option><option value="high">{t('effort.high')}</option><option value="max">{t('effort.max')}</option></select></Field>
+    {!form.state.writable && <span role="status">{t('advanced.readonly')}</span>}
     {message && <span role="status">{message}</span>}
-    <div style={{ display: 'flex', gap: 10 }}><Button size="sm" type="submit" disabled={disabled || !dirty}>{saving ? '保存中…' : '保存'}</Button><Button size="sm" type="button" variant="ghost" disabled={saving || !dirty} onClick={discard}>放弃修改</Button></div>
+    <div style={{ display: 'flex', gap: 10 }}><Button size="sm" type="submit" disabled={disabled || !dirty}>{saving ? t('advanced.saving') : t('settings.save')}</Button><Button size="sm" type="button" variant="ghost" disabled={saving || !dirty} onClick={discard}>{t('advanced.discard')}</Button></div>
   </form>
 }
 

@@ -1,4 +1,5 @@
 import { LlmError } from '@deepseek-ai/dsh-llm'
+import { t } from '../i18n/index.js'
 
 interface Waiter {
   resolve(release: () => void): void
@@ -21,7 +22,7 @@ export class RequestScheduler {
 
   acquire(account: string, session: string, limit: number, signal?: AbortSignal): Promise<() => void> {
     signal?.throwIfAborted()
-    if (this.disposed) return Promise.reject(new LlmError('ZCode 插件已停止。', 'ABORTED'))
+    if (this.disposed) return Promise.reject(new LlmError(t('scheduler.stopped'), 'ABORTED'))
     const queue = this.accounts.get(account) ?? { active: 0, limit, sessions: new Map(), cooldownUntil: 0 }
     queue.limit = limit
     this.accounts.set(account, queue)
@@ -34,7 +35,7 @@ export class RequestScheduler {
           if (pending && index >= 0) pending.splice(index, 1)
           if (pending?.length === 0) queue.sessions.delete(session)
           signal?.removeEventListener('abort', waiter.abort)
-          reject(signal?.reason ?? new LlmError('请求已取消。', 'ABORTED'))
+          reject(signal?.reason ?? new LlmError(t('scheduler.cancelled'), 'ABORTED'))
           this.pump(account, queue)
         },
       }
@@ -59,7 +60,7 @@ export class RequestScheduler {
       if (queue.timer) clearTimeout(queue.timer)
       for (const waiters of queue.sessions.values()) for (const waiter of waiters) {
         waiter.signal?.removeEventListener('abort', waiter.abort)
-        waiter.reject(new LlmError('ZCode 插件已停止。', 'ABORTED'))
+        waiter.reject(new LlmError(t('scheduler.stopped'), 'ABORTED'))
       }
       queue.sessions.clear()
     }

@@ -1,5 +1,7 @@
 # DSH ZCode 使用与开发说明
 
+**简体中文** | [English](usage.en.md) | [Русский](usage.ru.md)
+
 本文件保存完整的安装、使用、CLI、headless 与开发说明，不随插件包分发。DSH 插件详情页展示的是 [README.md](../README.md) 中的插件简介。
 
 通过 [TriDefender/zcode-api](https://github.com/TriDefender/zcode-api) 在 DeepSeek Harness 中使用 BigModel、Z.AI 的 Coding Plan 和 ZCode Start Plan。

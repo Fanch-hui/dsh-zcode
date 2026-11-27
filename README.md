@@ -1,5 +1,7 @@
 # DSH ZCode
 
+**简体中文** | [English](README.en.md) | [Русский](README.ru.md)
+
 将 ZCode 订阅通过反向代理接入 DeepSeek Harness，支持 BigModel、Z.AI 的 Coding Plan 与 Start Plan 模型。
 
 本插件提供连接与使用界面：

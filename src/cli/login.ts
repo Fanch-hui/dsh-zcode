@@ -1,4 +1,5 @@
 import type { AccountStatus, AuthPort, Platform } from '../types.js'
+import { t } from '../i18n/index.js'
 
 type LoginAuth = Pick<AuthPort, 'beginLogin' | 'waitForLogin'>
 
@@ -15,8 +16,8 @@ export async function login(
 
 export function accountState(account: AccountStatus): string {
   const states: Record<AccountStatus['state'], string> = {
-    signed_out: '未登录', authorizing: '等待浏览器授权', ready: '已连接',
-    reauth_required: '登录已失效，请重新登录', quota_exhausted: '套餐额度已用尽', error: '连接异常',
+    signed_out: t('state.signed_out'), authorizing: t('state.authorizing'), ready: t('state.ready'),
+    reauth_required: t('state.reauth_required'), quota_exhausted: t('state.quota_exhausted'), error: t('state.errorCli'),
   }
-  return `${account.platform === 'bigmodel' ? '智谱 BigModel' : 'Z.AI'}：${states[account.state]}`
+  return t('cli.accountState', { platform: account.platform === 'bigmodel' ? t('platform.bigmodel') : t('platform.zai'), state: states[account.state] })
 }

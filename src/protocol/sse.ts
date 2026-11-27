@@ -1,4 +1,5 @@
 import { LlmError } from '@deepseek-ai/dsh-llm'
+import { t } from '../i18n/index.js'
 import type { WireObject } from './types.js'
 
 const MAX_EVENT_CHARS = 8 * 1024 * 1024
@@ -10,9 +11,9 @@ function decodeEvent(frame: EventFrame): WireObject | undefined {
   const data = frame.data.join('\n')
   if (data === '[DONE]') return undefined
   let parsed: unknown
-  try { parsed = JSON.parse(data) } catch { throw new LlmError('模型流事件格式无效。', 'ZCODE_INVALID_STREAM') }
+  try { parsed = JSON.parse(data) } catch { throw new LlmError(t('sse.invalidEvent'), 'ZCODE_INVALID_STREAM') }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new LlmError('模型流事件格式无效。', 'ZCODE_INVALID_STREAM')
+    throw new LlmError(t('sse.invalidEvent'), 'ZCODE_INVALID_STREAM')
   }
   const value = parsed as WireObject
   return typeof value.type === 'string' || !frame.name ? value : { ...value, type: frame.name }
@@ -32,7 +33,7 @@ export async function* readEvents(body: ReadableStream<Uint8Array>, signal?: Abo
       const next = await reader.read()
       signal?.throwIfAborted()
       buffer += decoder.decode(next.value, { stream: !next.done })
-      if (buffer.length + frame.size > MAX_EVENT_CHARS) throw new LlmError('模型流事件过大。', 'ZCODE_INVALID_STREAM')
+      if (buffer.length + frame.size > MAX_EVENT_CHARS) throw new LlmError(t('sse.eventTooLarge'), 'ZCODE_INVALID_STREAM')
       while (true) {
         const newline = buffer.search(/[\r\n]/u)
         if (newline < 0 || (!next.done && buffer[newline] === '\r' && newline === buffer.length - 1)) break
@@ -52,7 +53,7 @@ export async function* readEvents(body: ReadableStream<Uint8Array>, signal?: Abo
         if (value.startsWith(' ')) value = value.slice(1)
         if (field === 'data') { frame.data.push(value); frame.size += value.length }
         else if (field === 'event') frame.name = value
-        if (frame.size + buffer.length > MAX_EVENT_CHARS) throw new LlmError('模型流事件过大。', 'ZCODE_INVALID_STREAM')
+        if (frame.size + buffer.length > MAX_EVENT_CHARS) throw new LlmError(t('sse.eventTooLarge'), 'ZCODE_INVALID_STREAM')
       }
       if (!next.done) continue
       if (buffer.startsWith('data:')) {

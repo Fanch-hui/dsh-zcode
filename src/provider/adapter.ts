@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { t } from '../i18n/index.js'
 import {
   LlmAdapter, LlmError, attributionHeaders, resolveRetryPolicy, projectImagesForTextModel,
   type GenerateOptions, type StreamChunk, type PreparedAdapterCall, type TokenUsage,
@@ -70,7 +71,7 @@ export class ZCodeAdapter extends LlmAdapter {
   }
 
   dispose(): void {
-    this.shutdown.abort(new LlmError('ZCode 插件已停止。', 'ABORTED'))
+    this.shutdown.abort(new LlmError(t('scheduler.stopped'), 'ABORTED'))
     this.scheduler.dispose()
   }
 
@@ -84,7 +85,7 @@ export class ZCodeAdapter extends LlmAdapter {
       const plan = planFor(provider)
       account = await this.dependencies.auth.snapshot(platform, signal, plan)
       if ((await this.dependencies.auth.status(platform, plan)).state === 'quota_exhausted') {
-        throw new LlmError('套餐额度已用尽，请刷新用量查看重置时间。', 'QUOTA_EXHAUSTED')
+        throw new LlmError(t('http.quotaExhausted'), 'QUOTA_EXHAUSTED')
       }
     } catch (error) { throw providerFailure(error) }
     account.signal.throwIfAborted()
@@ -110,7 +111,7 @@ export class ZCodeAdapter extends LlmAdapter {
       signal.throwIfAborted()
       const model = resolveModel(options.provider, options.model, settings)
       if (platformFor(options.provider) !== account.platform || planFor(options.provider) !== (account.plan ?? 'coding-plan')) {
-        throw new LlmError('账号或套餐与所选模型不一致。', 'AUTH')
+        throw new LlmError(t('adapter.accountMismatch'), 'AUTH')
       }
       const context = {
         provider: options.provider, model: options.model, scope: account.scope,
@@ -127,7 +128,7 @@ export class ZCodeAdapter extends LlmAdapter {
       const url = proxyEndpoint(credential)
       signal.throwIfAborted()
       if ((await this.dependencies.auth.status(account.platform, account.plan)).state === 'quota_exhausted') {
-        throw new LlmError('套餐额度已用尽，请刷新用量查看重置时间。', 'QUOTA_EXHAUSTED')
+        throw new LlmError(t('http.quotaExhausted'), 'QUOTA_EXHAUSTED')
       }
       signal.throwIfAborted()
       const response = await (this.dependencies.fetch ?? fetch)(url, {
@@ -150,7 +151,7 @@ export class ZCodeAdapter extends LlmAdapter {
         }
         throw failure
       }
-      if (!response.body) throw new LlmError('平台返回空响应。', 'TRANSPORT')
+      if (!response.body) throw new LlmError(t('adapter.emptyResponse'), 'TRANSPORT')
       for await (let chunk of parseStream(response.body, context, signal)) {
         signal.throwIfAborted()
         if (chunk.type === 'usage') this.dependencies.onUsage?.({ provider: options.provider, model: options.model }, chunk.usage)
@@ -161,7 +162,7 @@ export class ZCodeAdapter extends LlmAdapter {
           }
           if (code === 'AUTH' && account.plan === 'start-plan') this.dependencies.auth.markState(account, 'reauth_required', code)
           if (committed) chunk = { type: 'finish', reason: { kind: 'error', failure: {
-            code: 'ZCODE_STREAM_INTERRUPTED', message: '模型输出中断，请从当前会话继续。',
+            code: 'ZCODE_STREAM_INTERRUPTED', message: t('adapter.streamInterrupted'),
           } } }
         }
         committed ||= isModelContent(chunk)
@@ -169,11 +170,11 @@ export class ZCodeAdapter extends LlmAdapter {
       }
     } catch (error) {
       if (signal.aborted && (!timeout.aborted || account.signal.aborted || options.signal?.aborted || this.shutdown.signal.aborted)) {
-        yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'ZCode 请求已停止。' } } }
+        yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: t('adapter.requestStopped') } } }
         return
       }
-      if (committed) throw new LlmError('模型输出中断，请从当前会话继续。', 'ZCODE_STREAM_INTERRUPTED')
-      if (timeout.aborted) throw new LlmError('ZCode 请求超时，请重试当前步骤。', 'TIMEOUT')
+      if (committed) throw new LlmError(t('adapter.streamInterrupted'), 'ZCODE_STREAM_INTERRUPTED')
+      if (timeout.aborted) throw new LlmError(t('adapter.timeout'), 'TIMEOUT')
       throw providerFailure(error)
     } finally {
       local.abort()
@@ -193,11 +194,11 @@ function requestHeaders(credential: RequestCredential, session: string): Record<
 
 function proxyEndpoint(credential: RequestCredential): string {
   if (credential.kind !== 'proxy' || !credential.url) {
-    throw new LlmError('ZCode 本机代理尚未就绪，请重新连接。', 'TRANSPORT')
+    throw new LlmError(t('adapter.proxyNotReady'), 'TRANSPORT')
   }
   const url = new URL(credential.url)
   if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port || url.pathname !== '/v1/messages') {
-    throw new LlmError('ZCode 本机代理地址无效。', 'TRANSPORT')
+    throw new LlmError(t('adapter.proxyInvalid'), 'TRANSPORT')
   }
   return url.href
 }

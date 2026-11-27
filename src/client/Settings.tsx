@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
+import { t } from '../i18n/index.js'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { AccountStatus, Plan, Platform, QuotaSnapshot, TokenUsageTotals, UsageSnapshot } from '../types.js'
 import { PROVIDER_DEFINITIONS, providerFor } from '../provider/identity.js'
@@ -36,38 +37,38 @@ export function Settings({ controller }: { controller: ZCodeController }) {
       void controller.run('readQuota', selected, selectedPlan)
     }
   }, [controller, selected, selectedPlan, account?.state, account?.generation, state.pending])
-  if (!state.status) return <div role="status">{state.error ?? '正在读取连接状态…'} {state.error && <Button size="sm" onClick={() => { void controller.refresh() }}>重试</Button>}</div>
+  if (!state.status) return <div role="status">{state.error ?? t('settings.loading')} {state.error && <Button size="sm" onClick={() => { void controller.refresh() }}>{t('settings.retry')}</Button>}</div>
   const busy = Boolean(state.pending)
-  return <div aria-label="ZCode 连接设置" aria-busy={busy} style={{ color: 'var(--dsw-alias-text-primary)', maxWidth: 720, minWidth: 0, width: '100%', fontSize: 14, lineHeight: 1.5 }}>
+  return <div aria-label={t('settings.ariaLabel')} aria-busy={busy} style={{ color: 'var(--dsw-alias-text-primary)', maxWidth: 720, minWidth: 0, width: '100%', fontSize: 14, lineHeight: 1.5 }}>
     {state.error && <p role="alert">{state.error}</p>}
     <div style={{ ...row, gap: 20, marginBottom: 20 }}>
       <label style={row}>
-        <span>平台</span>
+        <span>{t('settings.platform')}</span>
         <select value={selected} style={control} disabled={busy} onChange={event => setPlatform(event.target.value === 'zai' ? 'zai' : 'bigmodel')}>
-          <option value="bigmodel">智谱 BigModel</option><option value="zai">Z.AI</option>
+          <option value="bigmodel">{t('platform.bigmodel')}</option><option value="zai">Z.AI</option>
         </select>
       </label>
       <label style={row}>
-        <span>套餐</span>
+        <span>{t('settings.plan')}</span>
         <select value={selectedPlan} style={control} disabled={busy} onChange={event => setPlan(event.target.value === 'start-plan' ? 'start-plan' : 'coding-plan')}>
           <option value="coding-plan">Coding Plan</option><option value="start-plan">Start Plan</option>
         </select>
       </label>
     </div>
-    <Section title="账号">
+    <Section title={t('settings.account')}>
       <Account key={`${selected}:${selectedPlan}`} platform={selected} plan={selectedPlan} account={account} controller={controller} pending={state.pending} />
     </Section>
-    <Section title="模型" action={<Button size="sm" variant="ghost" disabled={busy || account?.state !== 'ready'} onClick={() => { void controller.run('refreshModels', selected, selectedPlan) }}>刷新</Button>}>
-      {models.length ? <><p style={{ margin: '0 0 8px' }}>在 DSH 模型选择器中选择：</p><ul style={{ margin: 0, paddingLeft: 20 }}>{models.map(model => <li key={model.id}>{model.name}</li>)}</ul></> : <p style={hint}>{account?.state === 'ready' ? '暂无可用模型，可刷新目录。' : '登录后可查看模型。'}</p>}
+    <Section title={t('settings.models')} action={<Button size="sm" variant="ghost" disabled={busy || account?.state !== 'ready'} onClick={() => { void controller.run('refreshModels', selected, selectedPlan) }}>{t('settings.refresh')}</Button>}>
+      {models.length ? <><p style={{ margin: '0 0 8px' }}>{t('settings.modelsHint')}</p><ul style={{ margin: 0, paddingLeft: 20 }}>{models.map(model => <li key={model.id}>{model.name}</li>)}</ul></> : <p style={hint}>{account?.state === 'ready' ? t('settings.modelsEmptyReady') : t('settings.modelsEmptySignedOut')}</p>}
     </Section>
-    <Section title="用量" action={<Button size="sm" variant="ghost" disabled={busy || !connected} onClick={() => { void controller.run('refreshQuota', selected, selectedPlan) }}>刷新</Button>}>
-      {quota?.errorCode && <p role="status" style={hint}>用量读取失败，请刷新重试。</p>}
-      {quota?.snapshot ? <Quota snapshot={quota.snapshot} /> : <p style={hint}>{connected ? '暂无用量数据。' : '登录后可查看用量。'}</p>}
+    <Section title={t('settings.usage')} action={<Button size="sm" variant="ghost" disabled={busy || !connected} onClick={() => { void controller.run('refreshQuota', selected, selectedPlan) }}>{t('settings.refresh')}</Button>}>
+      {quota?.errorCode && <p role="status" style={hint}>{t('settings.usageError')}</p>}
+      {quota?.snapshot ? <Quota snapshot={quota.snapshot} /> : <p style={hint}>{connected ? t('settings.usageEmpty') : t('settings.usageSignedOut')}</p>}
     </Section>
-    <Section title="Token 统计" action={<Button size="sm" variant="ghost" disabled={busy} onClick={() => { void controller.refresh() }}>刷新</Button>}>
+    <Section title={t('settings.tokenStats')} action={<Button size="sm" variant="ghost" disabled={busy} onClick={() => { void controller.refresh() }}>{t('settings.refresh')}</Button>}>
       <Usage usage={state.status?.usage} />
     </Section>
-    <p style={hint}>并发数、输出上限和请求超时可在下方插件配置中调整。</p>
+    <p style={hint}>{t('settings.configHint')}</p>
   </div>
 }
 
@@ -85,64 +86,64 @@ function Account({ platform, plan, account, controller, pending }: { platform: P
   const cancelling = pending === 'cancelLogin'
   const authorizing = current === 'authorizing' || initializing || cancelling
   const label: Record<AccountStatus['state'], string> = {
-    signed_out: '未登录', authorizing: '等待浏览器授权', ready: '已连接',
-    reauth_required: '登录已失效，请重新登录', quota_exhausted: '套餐额度已用尽', error: '连接遇到问题，请重试',
+    signed_out: t('state.signed_out'), authorizing: t('state.authorizing'), ready: t('state.ready'),
+    reauth_required: t('state.reauth_required'), quota_exhausted: t('state.quota_exhausted'), error: t('state.error'),
   }
-  const accountLabel = account?.errorCode === 'ZCODE_START_LOGIN_REQUIRED' ? '请使用网页登录 Start Plan' : label[current]
+  const accountLabel = account?.errorCode === 'ZCODE_START_LOGIN_REQUIRED' ? t('state.startLoginRequired') : label[current]
   const authorizedUrl = safeAuthorizationUrl(account?.login?.authorizeUrl)
   return <>
     <div style={spread}>
-      <span role="status">{cancelling ? '正在取消登录' : initializing ? '正在准备授权' : accountLabel}{account?.accountLabel ? ` · ${account.accountLabel}` : ''}</span>
+      <span role="status">{cancelling ? t('settings.cancelling') : initializing ? t('settings.initializing') : accountLabel}{account?.accountLabel ? ` · ${account.accountLabel}` : ''}</span>
       <div style={row}>
         {authorizing ? <>
-          {authorizedUrl && !initializing && !cancelling && <a href={authorizedUrl} target="_blank" rel="noopener noreferrer">打开授权页</a>}
-          <Button size="sm" variant="outline" disabled={busy && !initializing} onClick={() => { setKey(''); void controller.run('cancelLogin', platform) }}>{cancelling ? '正在取消…' : '取消'}</Button>
+          {authorizedUrl && !initializing && !cancelling && <a href={authorizedUrl} target="_blank" rel="noopener noreferrer">{t('settings.openAuthPage')}</a>}
+          <Button size="sm" variant="outline" disabled={busy && !initializing} onClick={() => { setKey(''); void controller.run('cancelLogin', platform) }}>{cancelling ? t('settings.cancellingShort') : t('settings.cancel')}</Button>
         </> : <>
-          <Button size="sm" disabled={busy} onClick={() => { setKey(''); void controller.run('beginLogin', platform) }}>{current === 'signed_out' ? '登录' : '重新登录'}</Button>
-          {current !== 'signed_out' && <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setKey(''); void controller.run('disconnect', platform) }}>断开连接</Button>}
+          <Button size="sm" disabled={busy} onClick={() => { setKey(''); void controller.run('beginLogin', platform) }}>{current === 'signed_out' ? t('settings.login') : t('settings.relogin')}</Button>
+          {current !== 'signed_out' && <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setKey(''); void controller.run('disconnect', platform) }}>{t('settings.disconnect')}</Button>}
         </>}
       </div>
     </div>
-    {current === 'authorizing' && !initializing && !cancelling && <p style={hint}>请在浏览器中完成授权，然后返回此页面。</p>}
+    {current === 'authorizing' && !initializing && !cancelling && <p style={hint}>{t('settings.authorizeHint')}</p>}
     {plan === 'coding-plan' && <details style={{ marginTop: 16 }}>
-      <summary style={{ cursor: 'pointer', fontSize: 13 }}>使用手工套餐 Key</summary>
+      <summary style={{ cursor: 'pointer', fontSize: 13 }}>{t('settings.manualKey')}</summary>
       <form style={{ ...row, marginTop: 12 }} onSubmit={event => {
         event.preventDefault()
         if (!key.trim()) return
         void controller.setKey({ platform, key }).then(ok => { if (ok) setKey('') })
       }}>
-        <label htmlFor={`zcode-key-${platform}`}>套餐 Key</label>
+        <label htmlFor={`zcode-key-${platform}`}>{t('settings.planKey')}</label>
         <input id={`zcode-key-${platform}`} type="password" autoComplete="off" value={key} onChange={event => setKey(event.target.value)} style={{ ...control, flex: '1 1 220px' }} disabled={busy} />
-        <Button size="sm" type="submit" disabled={busy || !key.trim()}>保存</Button>
+        <Button size="sm" type="submit" disabled={busy || !key.trim()}>{t('settings.save')}</Button>
       </form>
     </details>}
   </>
 }
 
 function Quota({ snapshot }: { snapshot: QuotaSnapshot }) {
-  if (snapshot.unavailable || !snapshot.windows.length) return <p style={hint}>平台暂未提供用量信息。</p>
+  if (snapshot.unavailable || !snapshot.windows.length) return <p style={hint}>{t('quota.unavailable')}</p>
   return <>
     <dl style={{ margin: 0, display: 'grid', gap: 10 }}>
       {snapshot.windows.map((window, index) => <div key={`${window.name}:${index}`} style={spread}>
         <dt>{window.name}</dt><dd style={{ margin: 0 }}>
           {window.remaining !== undefined && <>{window.remaining.toLocaleString()}{window.limit !== undefined && ` / ${window.limit.toLocaleString()}`} {window.unit ?? ''}</>}
-          {window.remaining === undefined && window.usedPercent !== undefined && <>已用 {window.usedPercent.toFixed(1)}%</>}
-          {window.remaining === undefined && window.usedPercent === undefined && '未提供'}
-          {window.resetsAt !== undefined && <span style={{ ...hint, marginLeft: 10 }}>重置于 {new Date(window.resetsAt).toLocaleString()}</span>}
+          {window.remaining === undefined && window.usedPercent !== undefined && <>{t('quota.used', { value: window.usedPercent.toFixed(1) })}</>}
+          {window.remaining === undefined && window.usedPercent === undefined && t('quota.notProvided')}
+          {window.resetsAt !== undefined && <span style={{ ...hint, marginLeft: 10 }}>{t('quota.resetsAt', { date: new Date(window.resetsAt).toLocaleString() })}</span>}
         </dd>
       </div>)}
     </dl>
-    <p style={hint}>更新于 {new Date(snapshot.updatedAt).toLocaleString()}</p>
+    <p style={hint}>{t('quota.updatedAt', { date: new Date(snapshot.updatedAt).toLocaleString() })}</p>
   </>
 }
 
 function Usage({ usage }: { usage?: UsageSnapshot }) {
-  if (!usage?.models.length) return <p style={hint}>暂无统计数据，发起一次模型调用后显示。</p>
+  if (!usage?.models.length) return <p style={hint}>{t('settings.statsEmpty')}</p>
   const labelFor = (provider: string, model: string) =>
     `${PROVIDER_DEFINITIONS.find(item => item.id === provider)?.name.replace('ZCode · ', '') ?? provider} · ${model}`
   const cell: CSSProperties = { padding: '6px 10px 6px 0', whiteSpace: 'nowrap' }
   const numeric: CSSProperties = { ...cell, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
-  const columns = ['模型', '调用', '总 token', '输入', '输出', '缓存读取', '命中率']
+  const columns = [t('settings.colModel'), t('settings.colCalls'), t('settings.colTotal'), t('settings.colInput'), t('settings.colOutput'), t('settings.colCacheRead'), t('settings.colHitRate')]
   const line = (label: string, calls: number, totals: TokenUsageTotals, bold = false) => <tr key={label} style={{ borderTop: border, ...(bold ? { fontWeight: 600 } : {}) }}>
     <td style={cell}>{label}</td>
     <td style={numeric}>{calls.toLocaleString()}</td>
@@ -160,11 +161,11 @@ function Usage({ usage }: { usage?: UsageSnapshot }) {
         </tr></thead>
         <tbody>
           {usage.models.map(entry => line(labelFor(entry.provider, entry.model), entry.calls, entry.totals))}
-          {line('合计', usage.models.reduce((sum, entry) => sum + entry.calls, 0), usage.totals, true)}
+          {line(t('settings.statsTotal'), usage.models.reduce((sum, entry) => sum + entry.calls, 0), usage.totals, true)}
         </tbody>
       </table>
     </div>
-    <p style={hint}>自插件启动以来累计；每个套餐下的每个模型单独统计。输入含缓存读取与写入，命中率按缓存读取 / 输入计算。</p>
+    <p style={hint}>{t('settings.statsHint')}</p>
   </>
 }
 
